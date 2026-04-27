@@ -1,0 +1,157 @@
+/* =========================================
+   DEKLARASI FONT ROBOTO SLAB
+   Mengambil dari folder: src/assets/font/roboto/
+   ========================================= */
+
+@font-face {
+  font-family: 'Roboto Slab';
+  src: url('../assets/font/roboto/RobotoSlab-Thin.ttf') format('truetype');
+  font-weight: 100;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Slab';
+  src: url('../assets/font/roboto/RobotoSlab-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Slab';
+  src: url('../assets/font/roboto/RobotoSlab-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Slab';
+  src: url('../assets/font/roboto/RobotoSlab-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Slab';
+  src: url('../assets/font/roboto/RobotoSlab-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Slab';
+  src: url('../assets/font/roboto/RobotoSlab-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Slab';
+  src: url('../assets/font/roboto/RobotoSlab-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Roboto Slab';
+  src: url('../assets/font/roboto/RobotoSlab-Black.ttf') format('truetype');
+  font-weight: 900;
+  font-style: normal;
+}
+
+/* =========================================
+   VARIABEL & GLOBAL STYLES
+   ========================================= */
+
+:root {
+  /* Menggunakan font utama Roboto Slab */
+  font-family: 'Roboto Slab', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Variabel Warna Tema Hijau JEC */
+  --primary-color: #4CAF50;
+  --primary-color-light: #66BB6A;
+  --primary-color-dark: #388E3C;
+
+  --danger-color: #f44336;
+  --danger-color-light: #ef5350;
+
+  /* Dark Mode Variables */
+  --bg-color-dark: #242424;
+  --surface-color-dark: #1a1a1a;
+  --text-color-dark: rgba(255, 255, 255, 0.87);
+  --text-color-secondary-dark: #888;
+  --border-color-dark: #333;
+
+  /* Light Mode Variables */
+  --bg-color-light: #f4f7f6;
+  --surface-color-light: #ffffff;
+  --text-color-light: #213547;
+  --text-color-secondary-light: #555;
+  --border-color-light: #e0e0e0;
+
+  color-scheme: light dark;
+  color: var(--text-color-dark);
+  background-color: var(--bg-color-dark);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 2.8em;
+  line-height: 1.1;
+  font-weight: 700; /* Menggunakan RobotoSlab-Bold */
+}
+
+a {
+  font-weight: 500;
+  color: var(--primary-color);
+  text-decoration: inherit;
+  transition: color 0.25s;
+}
+
+a:hover {
+  color: var(--primary-color-light);
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: var(--surface-color-dark);
+  cursor: pointer;
+  transition: border-color 0.25s, background-color 0.25s;
+}
+
+button:hover {
+  border-color: var(--primary-color);
+}
+
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+/* Penyesuaian Light Mode */
+@media (prefers-color-scheme: light) {
+  :root {
+    color: var(--text-color-light);
+    background-color: var(--bg-color-light);
+  }
+  button {
+    background-color: var(--surface-color-light);
+  }
+}
