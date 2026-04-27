@@ -1,0 +1,303 @@
+// path: path/to/your/frontend/components/Dashboard.jsx
+
+import React, { useState, useEffect } from 'react';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell
+} from 'recharts';
+import '../css/style.css';
+
+function Dashboard() {
+  const [stats, setStats] = useState({
+    totalUsers: 0, totalRS: 0, totalObat: 0, totalCoin: 0, totalCart: 0,
+    totalPromo: 0, totalTestimoni: 0, totalVideos: 0, totalEvent: 0, totalJournal: 0
+  });
+
+  const [loginActivity, setLoginActivity] = useState([]);
+  const [userList, setUserList] = useState([]);
+  const [selectedChartUser, setSelectedChartUser] = useState('all');
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [pendingActions, setPendingActions] = useState([]);
+  const [topServices, setTopServices] = useState([]);
+
+  // Warna chart yang lebih modern (Tailwind inspired)
+  const lineColors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#a28dff', '#ff6b9d', '#4ecdc4', '#f39c12', '#e74c3c', '#3498db'];
+  const pieColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+  const getGreetingTime = () => {
+    const currentHour = new Date().getHours();
+    if (currentHour >= 0 && currentHour < 11) return "Pagi";
+    if (currentHour >= 11 && currentHour < 15) return "Siang";
+    if (currentHour >= 15 && currentHour < 19) return "Sore";
+    return "Malam";
+  };
+
+  const getDayName = () => {
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    return days[new Date().getDay()];
+  };
+
+  const formatDateTimeIndo = (dateInput) => {
+    const date = new Date(dateInput);
+    const day = date.getDate();
+    const month = date.toLocaleDateString('id-ID', { month: 'long' });
+    const year = date.getFullYear();
+    const time = date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+    return `${day} ${month} ${year}, ${time}`;
+  };
+
+  const timeAgo = (dateInput) => {
+    const date = new Date(dateInput);
+    const seconds = Math.floor((new Date() - date) / 1000);
+    if (seconds < 60) return `${seconds}d lalu`;
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + "thn lalu";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + "bln lalu";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + "h lalu";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + "j lalu";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + "m lalu";
+    return "Baru saja";
+  };
+
+  const renderActivityItem = (activity, index) => {
+    let markerClass = "marker-default";
+    let message = "";
+
+    switch (activity.type) {
+      case 'register':
+        markerClass = "marker-register";
+        message = <><strong>{activity.user_name}</strong> baru saja mendaftar ke sistem.</>;
+        break;
+      case 'lasik':
+        markerClass = "marker-lasik";
+        message = <><strong>{activity.user_name}</strong> membuat jadwal untuk <strong>{activity.detail}</strong>.</>;
+        break;
+      case 'flacs':
+        markerClass = "marker-flacs";
+        message = <><strong>{activity.user_name}</strong> membuat jadwal untuk <strong>{activity.detail}</strong>.</>;
+        break;
+      case 'obat':
+        markerClass = "marker-obat";
+        message = <><strong>{activity.user_name}</strong> melakukan pemesanan <strong>{activity.detail}</strong>.</>;
+        break;
+      default:
+        message = <><strong>{activity.user_name}</strong> melakukan aktivitas baru.</>;
+    }
+
+    return (
+      <li key={`${activity.type}-${index}`} className="timeline-item">
+        <div className={`timeline-marker ${markerClass}`}></div>
+        <div className="timeline-content">
+          <span className="timeline-text">{message}</span>
+          <span className="timeline-time">{timeAgo(activity.created_at)}</span>
+        </div>
+      </li>
+    );
+  };
+
+  useEffect(() => {
+    const token = localStorage.getItem('adminToken');
+    const headers = { 'Authorization': `Bearer ${token}` };
+    const baseUrl = `${import.meta.env.VITE_API_BASE_URL}/admin/beranda`;
+
+    const fetchDashboardData = async () => {
+      try {
+        const statsRes = await fetch(`${baseUrl}/stats`, { headers });
+        const statsData = await statsRes.json();
+        if (statsData.success) setStats(statsData.data);
+
+        const loginRes = await fetch(`${baseUrl}/login-activity`, { headers });
+        const loginData = await loginRes.json();
+        if (loginData.success) {
+          setLoginActivity(loginData.data.chartData);
+          setUserList(loginData.data.userList);
+        }
+
+        const recentRes = await fetch(`${baseUrl}/recent-activity`, { headers });
+        const recentData = await recentRes.json();
+        if (recentData.success) setRecentActivities(recentData.data);
+
+        const pendingRes = await fetch(`${baseUrl}/pending-actions`, { headers });
+        const pendingData = await pendingRes.json();
+        if (pendingData.success) setPendingActions(pendingData.data);
+
+        const topRes = await fetch(`${baseUrl}/top-services`, { headers });
+        const topData = await topRes.json();
+        if (topData.success) setTopServices(topData.data);
+
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  return (
+    <div className="dashboard-page">
+      <div className="dashboard-header">
+        <div className="header-text">
+          <h1>Admin Dashboard</h1>
+          <p>Selamat datang di Admin JEC!</p>
+        </div>
+        <div className="header-greeting">
+          <p>Selamat {getGreetingTime()} di hari {getDayName()}, Admin JEC! 🚀</p>
+        </div>
+      </div>
+
+      <div className="alert-card">
+        <span>⚠️</span>
+        <p>Jangan lupa untuk selalu mengecek data pengguna baru, daftar booking, dan obat.</p>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card"><div className="stat-icon users">👤</div><div className="stat-info"><h3>Total Pengguna</h3><p>{stats.totalUsers.toLocaleString('id-ID')}</p></div></div>
+        <div className="stat-card"><div className="stat-icon rs">🏥</div><div className="stat-info"><h3>Total Rumah Sakit</h3><p>{stats.totalRS.toLocaleString('id-ID')}</p></div></div>
+        <div className="stat-card"><div className="stat-icon obat">💊</div><div className="stat-info"><h3>Total Obat</h3><p>{stats.totalObat.toLocaleString('id-ID')}</p></div></div>
+        <div className="stat-card"><div className="stat-icon coin">💰</div><div className="stat-info"><h3>Total Coin User</h3><p>{stats.totalCoin.toLocaleString('id-ID')}</p></div></div>
+        <div className="stat-card"><div className="stat-icon cart">🛒</div><div className="stat-info"><h3>Item di Cart</h3><p>{stats.totalCart.toLocaleString('id-ID')}</p></div></div>
+        <div className="stat-card"><div className="stat-icon promo">🏷️</div><div className="stat-info"><h3>Total Promo</h3><p>{stats.totalPromo.toLocaleString('id-ID')}</p></div></div>
+        <div className="stat-card"><div className="stat-icon testimoni">🌟</div><div className="stat-info"><h3>Total Testimoni</h3><p>{stats.totalTestimoni.toLocaleString('id-ID')}</p></div></div>
+        <div className="stat-card"><div className="stat-icon videos">▶️</div><div className="stat-info"><h3>Total Videos</h3><p>{stats.totalVideos.toLocaleString('id-ID')}</p></div></div>
+        <div className="stat-card"><div className="stat-icon event">🗓️</div><div className="stat-info"><h3>Total Event</h3><p>{stats.totalEvent.toLocaleString('id-ID')}</p></div></div>
+        <div className="stat-card"><div className="stat-icon journals">📚</div><div className="stat-info"><h3>Total Journals</h3><p>{stats.totalJournal.toLocaleString('id-ID')}</p></div></div>
+      </div>
+
+      {/* Baris untuk Menunggu Persetujuan & Obat Terpopuler */}
+      <div className="dashboard-row-layout">
+        
+        {/* Kolom Menunggu Persetujuan */}
+        <div className="content-area" style={{ flex: 1.5 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--gray-200)', paddingBottom: '0.75rem' }}>
+            <h2 style={{ margin: 0, border: 'none', padding: 0 }}>Menunggu Persetujuan</h2>
+          </div>
+          
+          <ul className="pending-list">
+            {pendingActions.length > 0 ? (
+              pendingActions.map((action, index) => {
+                // Tentukan class warna badge berdasarkan tipe
+                const tagClass = action.type.toLowerCase() === 'lasik' ? 'tag-lasik' : 
+                                 action.type.toLowerCase() === 'flacs' ? 'tag-flacs' : 
+                                 action.type.toLowerCase() === 'obat' ? 'tag-obat' : 'tag-default';
+                
+                return (
+                  <li key={`pending-${index}`} className="pending-item">
+                    <div className="pending-info">
+                      <div className="pending-header">
+                        <span className={`badge-tag ${tagClass}`}>{action.type}</span>
+                        <span className="pending-user">{action.name}</span>
+                      </div>
+                      <span className="pending-invoice">{action.invoice}</span>
+                      <span className="pending-time">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '2px'}}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        {formatDateTimeIndo(action.created_at)}
+                      </span>
+                    </div>
+                    <button className="btn-proses">Proses ➔</button>
+                  </li>
+                );
+              })
+            ) : (
+              <li style={{ textAlign: 'center', color: '#888', padding: '1.5rem 0' }}>Tidak ada antrean yang menunggu persetujuan.</li>
+            )}
+          </ul>
+        </div>
+
+        {/* Kolom Obat Terpopuler */}
+        <div className="chart-container" style={{ flex: 1 }}>
+          <div style={{ marginBottom: '1rem', borderBottom: '1px solid var(--gray-200)', paddingBottom: '0.75rem' }}>
+            <h2 style={{ margin: 0, border: 'none', padding: 0, textAlign: 'center' }}>Obat Terpopuler</h2>
+          </div>
+          
+          {topServices.length > 0 ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={topServices} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name }) => `${name}`}>
+                  {topServices.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={pieColors[index % pieColors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ textAlign: 'center', color: '#888', marginTop: '2rem' }}>Belum ada data obat terjual.</div>
+          )}
+        </div>
+
+      </div>
+
+      {/* Baris Chart Login & Aktivitas Terbaru */}
+      <div className="dashboard-row-layout">
+        <div className="chart-container">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+            <h2 style={{ margin: 0, borderBottom: 'none', paddingBottom: 0 }}>Aktivitas Login Mingguan</h2>
+            {userList.length > 0 && (
+              <select 
+                className="filter-dropdown"
+                style={{ padding: '8px 12px', minWidth: '220px', width: 'auto', minHeight: '38px' }}
+                value={selectedChartUser}
+                onChange={(e) => setSelectedChartUser(e.target.value)}
+              >
+                <option value="all">Semua Top 10 Users</option>
+                {userList.map((user) => (
+                  <option key={user.userId} value={user.dataKey}>
+                    {user.username} ({user.totalLogins} login)
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={loginActivity} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color-dark)" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              {userList
+                .filter(user => selectedChartUser === 'all' || user.dataKey === selectedChartUser)
+                .map((user) => {
+                  const originalIndex = userList.findIndex(u => u.userId === user.userId);
+                  return (
+                    <Line 
+                      key={user.userId}
+                      type="monotone" 
+                      dataKey={user.dataKey}
+                      name={user.username}
+                      stroke={lineColors[originalIndex % lineColors.length]}
+                      strokeWidth={selectedChartUser === 'all' ? 2 : 3}
+                      activeDot={{ r: 6 }}
+                      dot={{ r: 3 }}
+                    />
+                  );
+                })}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="content-area">
+          <h2>Aktivitas Terbaru</h2>
+          <div className="timeline-wrapper">
+            <ul className="timeline-list">
+              {recentActivities.length > 0 ? (
+                recentActivities.map((activity, index) => renderActivityItem(activity, index))
+              ) : (
+                <li style={{ color: '#888', padding: '0.9rem 0' }}>
+                  Belum ada aktivitas terbaru hari ini.
+                </li>
+              )}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default Dashboard;

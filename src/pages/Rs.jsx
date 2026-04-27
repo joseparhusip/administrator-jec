@@ -1,0 +1,541 @@
+// path: src/pages/Rs.jsx
+import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
+import '../css/style.css';
+
+const API_URL = import.meta.env.VITE_API_BASE_URL;   // http://…/api
+const IMG_URL = import.meta.env.VITE_IMAGE_BASE_URL; // http://…  (untuk path gambar)
+const TOKEN = localStorage.getItem('adminToken');
+const authHeaders = { headers: { 'Authorization': `Bearer ${TOKEN}` } };
+const TYPE_OPTIONS = ['Rumah Sakit', 'Klinik'];
+
+// ============================================================
+// INJECT CSS (Pagination)
+// ============================================================
+if (!document.getElementById('pagination-styles')) {
+  const style = document.createElement('style');
+  style.id = 'pagination-styles';
+  style.textContent = `
+    .pagination-container {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 6px;
+      margin-top: 24px;
+      padding-bottom: 24px;
+    }
+    .pagination-btn {
+      padding: 6px 14px;
+      background: #ffffff;
+      border: 1.5px solid #E2E8F0;
+      color: #64748B;
+      font-weight: 600;
+      font-size: 0.85rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .pagination-btn:hover:not(:disabled) {
+      background: #F8FAFC;
+      border-color: #CBD5E1;
+      color: #334155;
+    }
+    .pagination-btn.active {
+      background: #2E7D32;
+      border-color: #2E7D32;
+      color: #ffffff;
+    }
+    .pagination-btn:disabled {
+      background: #F1F5F9;
+      color: #94A3B8;
+      cursor: not-allowed;
+      border-color: #E2E8F0;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// ── RS Card ──────────────────────────────────────────────────────
+function RsCard({ rs, onViewDetail }) {
+  const imageUrl = rs.image ? `${IMG_URL}/${rs.image}` : null;
+  const badgeClass = rs.type === 'Rumah Sakit' ? 'rs' : 'klinik';
+
+  return (
+    <div className="rs-card" onClick={() => onViewDetail(rs)}>
+      <div className="rs-card-image-wrap">
+        {imageUrl ? (
+          <img src={imageUrl} alt={rs.title} className="rs-card-image" />
+        ) : (
+          <div className="rs-card-image-placeholder">🏥</div>
+        )}
+      </div>
+      <div className="rs-card-body">
+        <h3 className="rs-card-title">{rs.title}</h3>
+        <p className="rs-card-location">{rs.location}</p>
+        <span className={`rs-card-badge ${badgeClass}`}>{rs.type}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Detail Modal ─────────────────────────────────────────────────
+function DetailRsModal({ rs, onClose, onEdit, onDelete }) {
+  if (!rs) return null;
+  const imageUrl = rs.image ? `${IMG_URL}/${rs.image}` : null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content detail-modal-container" onClick={e => e.stopPropagation()}>
+
+        {/* Hero */}
+        <div className="rs-detail-hero">
+          <div className="rs-detail-image-wrap">
+            {imageUrl ? (
+              <img src={imageUrl} alt={rs.title} className="rs-detail-image" />
+            ) : (
+              <div className="rs-detail-image-placeholder">🏥</div>
+            )}
+          </div>
+          <div className="rs-detail-hero-info">
+            <div className="rs-detail-hero-id">ID #{rs.id}</div>
+            <h2 className="rs-detail-hero-title">{rs.title}</h2>
+            <p className="rs-detail-hero-location">{rs.location}</p>
+          </div>
+          <button className="modal-close-btn detail-close-btn" onClick={onClose}>×</button>
+        </div>
+
+        {/* Body */}
+        <div className="detail-modal-body">
+          <div className="detail-section">
+            <h3>Deskripsi</h3>
+            <p style={{ fontSize: '0.95rem', color: '#343a40', lineHeight: 1.7, margin: 0 }}>
+              {rs.description || <span style={{ color: '#adb5bd', fontStyle: 'italic' }}>Tidak ada deskripsi</span>}
+            </p>
+          </div>
+
+          <div className="detail-section">
+            <h3>Info Fasilitas</h3>
+            <div className="detail-grid">
+              <div className="detail-item">
+                <span className="detail-label">ID</span>
+                <span className="detail-value">#{rs.id}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Tipe</span>
+                <span className="detail-value">{rs.type}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Lokasi</span>
+                <span className="detail-value">{rs.location}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose}>Tutup</button>
+          <button className="btn-edit-modal" onClick={() => onEdit(rs)}>Edit</button>
+          <button className="btn-danger" onClick={() => onDelete(rs)}>Hapus</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ───────────────────────────────────────────────
+function Rs() {
+  const [rsData, setRsData] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('Semua');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [viewingRs, setViewingRs] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
+  const [formData, setFormData] = useState({ title: '', location: '', type: '', description: '' });
+  const [newImageFile, setNewImageFile] = useState(null);
+  const [newImagePreview, setNewImagePreview] = useState(null);
+
+  const [selectedRs, setSelectedRs] = useState(null);
+  const [editFormData, setEditFormData] = useState({ id: '', title: '', location: '', type: '', description: '' });
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [editImagePreview, setEditImagePreview] = useState(null);
+  const [currentImagePath, setCurrentImagePath] = useState('');
+
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [toastMessage, setToastMessage] = useState('');
+
+  // ── State untuk Pagination ──
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 4;
+
+  const fetchRsData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await axios.get(`${API_URL}/admin/fasilitas`, authHeaders);
+      setRsData(response.data.data || []);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError('Gagal memuat data. Pastikan Anda sudah login dan backend berjalan.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchRsData(); }, []);
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(''), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
+  // Reset ke halaman 1 saat pencarian / filter diubah
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterType]);
+
+  const validateImageFile = (file) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const minSize = 500 * 1024;
+    if (!allowedTypes.includes(file.type)) { alert('Format gambar tidak didukung! Hanya JPG, PNG, dan WEBP yang diperbolehkan.'); return false; }
+    if (file.size > minSize) { alert(`Ukuran gambar terlalu besar! Maksimal 500KB. Ukuran file Anda: ${(file.size / 1024).toFixed(0)}KB.`); return false; }
+    return true;
+  };
+
+  const handleFormChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!validateImageFile(file)) { e.target.value = ''; setNewImageFile(null); setNewImagePreview(null); return; }
+    setNewImageFile(file);
+    setNewImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!newImageFile) { alert("Gambar wajib diisi!"); return; }
+    if (!formData.type) { alert("Silakan pilih Tipe Fasilitas!"); return; }
+    const data = new FormData();
+    data.append('title', formData.title);
+    data.append('location', formData.location);
+    data.append('type', formData.type);
+    data.append('description', formData.description);
+    data.append('image', newImageFile);
+    try {
+      await axios.post(`${API_URL}/admin/fasilitas`, data, { headers: { ...authHeaders.headers, 'Content-Type': 'multipart/form-data' } });
+      setToastMessage('Data berhasil ditambahkan.');
+      setIsModalOpen(false);
+      setFormData({ title: '', location: '', type: '', description: '' });
+      setNewImageFile(null);
+      setNewImagePreview(null);
+      fetchRsData();
+    } catch (err) {
+      console.error("Error creating:", err);
+      setError('Gagal menyimpan data.');
+    }
+  };
+
+  const handleOpenEditModal = (rs) => {
+    setViewingRs(null);
+    setSelectedRs(rs);
+    setEditFormData({ id: rs.id, title: rs.title, location: rs.location, type: rs.type, description: rs.description });
+    setCurrentImagePath(rs.image);
+    setEditImageFile(null);
+    setEditImagePreview(null);
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => { setIsEditModalOpen(false); setSelectedRs(null); };
+
+  const handleEditFormChange = (e) => setEditFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+
+  const handleEditFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!validateImageFile(file)) { e.target.value = ''; setEditImageFile(null); setEditImagePreview(null); return; }
+    setEditImageFile(file);
+    setEditImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    const data = new FormData();
+    data.append('title', editFormData.title);
+    data.append('location', editFormData.location);
+    data.append('type', editFormData.type);
+    data.append('description', editFormData.description);
+    if (editImageFile) data.append('image', editImageFile);
+    try {
+      await axios.put(`${API_URL}/admin/fasilitas/${editFormData.id}`, data, { headers: { ...authHeaders.headers, 'Content-Type': 'multipart/form-data' } });
+      setToastMessage('Data berhasil diperbarui.');
+      handleCloseEditModal();
+      fetchRsData();
+    } catch (err) {
+      console.error("Error updating:", err);
+      setError('Gagal memperbarui data.');
+    }
+  };
+
+  const handleOpenConfirmModal = (rs) => {
+    setViewingRs(null);
+    setItemToDelete(rs);
+    setIsConfirmModalOpen(true);
+  };
+
+  const handleCloseConfirmModal = () => { setItemToDelete(null); setIsConfirmModalOpen(false); };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
+    try {
+      await axios.delete(`${API_URL}/admin/fasilitas/${itemToDelete.id}`, authHeaders);
+      setToastMessage('Data berhasil dihapus');
+      handleCloseConfirmModal();
+      fetchRsData();
+    } catch (err) {
+      console.error("Error deleting:", err);
+      setError('Gagal menghapus data.');
+    }
+  };
+
+  const uniqueTypes = useMemo(() => ['Semua', ...new Set(rsData.map(item => item.type).filter(Boolean))], [rsData]);
+
+  const filteredRs = rsData.filter(rs => {
+    const matchSearch = rs.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchType = filterType === 'Semua' || rs.type === filterType;
+    return matchSearch && matchType;
+  });
+
+  // ── Logika Pagination ──
+  const totalPages = Math.ceil(filteredRs.length / ITEMS_PER_PAGE);
+  const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
+  const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
+  const currentRsList = filteredRs.slice(indexOfFirstItem, indexOfLastItem);
+
+  const handlePageChange = (pageNumber) => setCurrentPage(pageNumber);
+
+  return (
+    <div className="crud-page">
+      {/* ── HEADER ── */}
+      <div className="crud-page-header">
+        <h1>Manajemen Fasilitas Kesehatan</h1>
+        <div className="crud-header-controls">
+          <select
+            className="filter-dropdown"
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+          >
+            {uniqueTypes.map((type, index) => <option key={index} value={type}>{type}</option>)}
+          </select>
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="Cari nama fasilitas..."
+              className="search-input"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <button className="add-button" onClick={() => setIsModalOpen(true)}>
+            + Tambah Data
+          </button>
+        </div>
+      </div>
+
+      {/* ── SUMMARY ── */}
+      <div className="users-summary-bar">
+        <span className="users-count-label">
+          Menampilkan <strong>{filteredRs.length === 0 ? 0 : indexOfFirstItem + 1}</strong> - <strong>{Math.min(indexOfLastItem, filteredRs.length)}</strong> dari <strong>{filteredRs.length}</strong> fasilitas
+        </span>
+      </div>
+
+      {/* ── CARD GRID ── */}
+      {loading && (
+        <div className="users-loading">
+          <div className="users-loading-spinner" />
+          <p>Memuat data fasilitas...</p>
+        </div>
+      )}
+      {error && <div className="users-error">{error}</div>}
+      {!loading && !error && filteredRs.length === 0 && (
+        <div className="users-empty">
+          <div className="users-empty-icon">🏥</div>
+          <p>Tidak ada fasilitas ditemukan</p>
+          {searchTerm && <small>Coba kata kunci lain</small>}
+        </div>
+      )}
+      {!loading && !error && filteredRs.length > 0 && (
+        <>
+          <div className="rs-card-grid">
+            {/* Menggunakan currentRsList agar tampil 4 per halaman */}
+            {currentRsList.map(rs => (
+              <RsCard key={rs.id} rs={rs} onViewDetail={setViewingRs} />
+            ))}
+          </div>
+
+          {/* ── Kontrol Pagination ── */}
+          {totalPages > 1 && (
+            <div className="pagination-container">
+              <button className="pagination-btn" disabled={currentPage === 1} onClick={() => handlePageChange(currentPage - 1)}>
+                &laquo; Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button key={page} className={`pagination-btn ${currentPage === page ? 'active' : ''}`} onClick={() => handlePageChange(page)}>
+                  {page}
+                </button>
+              ))}
+              <button className="pagination-btn" disabled={currentPage === totalPages} onClick={() => handlePageChange(currentPage + 1)}>
+                Next &raquo;
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── DETAIL MODAL ── */}
+      {viewingRs && (
+        <DetailRsModal
+          rs={viewingRs}
+          onClose={() => setViewingRs(null)}
+          onEdit={handleOpenEditModal}
+          onDelete={handleOpenConfirmModal}
+        />
+      )}
+
+      {/* ── MODAL TAMBAH ── */}
+      {isModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Tambah Fasilitas Baru</h2>
+              <button type="button" className="modal-close-btn" onClick={() => setIsModalOpen(false)}>×</button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body">
+                <div className="modal-form-group">
+                  <label>Nama Fasilitas</label>
+                  <input type="text" name="title" value={formData.title} onChange={handleFormChange} required />
+                </div>
+                <div className="modal-form-group">
+                  <label>Lokasi</label>
+                  <input type="text" name="location" value={formData.location} onChange={handleFormChange} required />
+                </div>
+                <div className="modal-form-group">
+                  <label>Tipe</label>
+                  <select name="type" value={formData.type} onChange={handleFormChange} required style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #ddd' }}>
+                    <option value="" disabled>-- Pilih Tipe Fasilitas --</option>
+                    {TYPE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                </div>
+                <div className="modal-form-group">
+                  <label>Deskripsi</label>
+                  <textarea name="description" value={formData.description} onChange={handleFormChange} required rows="4" />
+                </div>
+                <div className="modal-form-group">
+                  <label>Gambar <span style={{ fontSize: '0.8rem', color: '#888' }}>(JPG/PNG/WEBP, maks. 500KB)</span></label>
+                  <input type="file" name="image" onChange={handleFileChange} required accept=".jpg,.jpeg,.png,.webp" />
+                  {newImagePreview && (
+                    <div style={{ marginTop: '10px' }}>
+                      <p style={{ fontSize: '0.85rem', color: '#555', marginBottom: '6px' }}>Preview:</p>
+                      <img src={newImagePreview} alt="Preview" style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', borderRadius: '8px', border: '1px solid #ddd' }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn-secondary" onClick={() => setIsModalOpen(false)}>Batal</button>
+                <button type="submit" className="btn-primary">Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL EDIT ── */}
+      {isEditModalOpen && selectedRs && (
+        <div className="modal-overlay" onClick={handleCloseEditModal}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit: {selectedRs.title}</h2>
+              <button type="button" className="modal-close-btn" onClick={handleCloseEditModal}>×</button>
+            </div>
+            <form onSubmit={handleEditSubmit}>
+              <div className="modal-body">
+                <div className="modal-form-group">
+                  <label>Nama Fasilitas</label>
+                  <input type="text" name="title" value={editFormData.title} onChange={handleEditFormChange} required />
+                </div>
+                <div className="modal-form-group">
+                  <label>Lokasi</label>
+                  <input type="text" name="location" value={editFormData.location} onChange={handleEditFormChange} required />
+                </div>
+                <div className="modal-form-group">
+                  <label>Tipe</label>
+                  <select name="type" value={editFormData.type} onChange={handleEditFormChange} required style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #ddd' }}>
+                    <option value="" disabled>-- Pilih Tipe Fasilitas --</option>
+                    {TYPE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                </div>
+                <div className="modal-form-group">
+                  <label>Deskripsi</label>
+                  <textarea name="description" value={editFormData.description} onChange={handleEditFormChange} required rows="4" />
+                </div>
+                <div className="modal-form-group">
+                  <label>Gambar Saat Ini</label>
+                  {currentImagePath
+                    ? <img src={`${IMG_URL}/${currentImagePath}`} alt="Preview" style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />
+                    : <span style={{ color: '#adb5bd', fontSize: '0.9rem' }}>Tidak ada gambar</span>}
+                </div>
+                <div className="modal-form-group">
+                  <label>Ganti Gambar (Opsional) <span style={{ fontSize: '0.8rem', color: '#888' }}>(JPG/PNG/WEBP, maks. 500KB)</span></label>
+                  <input type="file" name="image" onChange={handleEditFileChange} accept=".jpg,.jpeg,.png,.webp" />
+                  {editImagePreview && (
+                    <div style={{ marginTop: '10px' }}>
+                      <p style={{ fontSize: '0.85rem', color: '#555', marginBottom: '6px' }}>Preview gambar baru:</p>
+                      <img src={editImagePreview} alt="Preview Baru" style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', borderRadius: '8px', border: '1px solid #ddd' }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn-secondary" onClick={handleCloseEditModal}>Batal</button>
+                <button type="submit" className="btn-primary">Simpan Perubahan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL HAPUS ── */}
+      {isConfirmModalOpen && (
+        <div className="modal-overlay confirmation-modal" onClick={handleCloseConfirmModal}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <button type="button" className="modal-close-btn" onClick={handleCloseConfirmModal}>×</button>
+            <div className="modal-body">
+              <div className="modal-icon">⚠️</div>
+              <div className="modal-body-content">
+                <h2>Konfirmasi Hapus</h2>
+                <p>Apakah Anda yakin ingin menghapus: <strong>{itemToDelete?.title}</strong>?</p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn-secondary" onClick={handleCloseConfirmModal}>Batal</button>
+              <button type="button" className="btn-danger" onClick={handleDeleteConfirm}>Ya, Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toastMessage && <div className="toast-notification">{toastMessage}</div>}
+    </div>
+  );
+}
+
+export default Rs;
