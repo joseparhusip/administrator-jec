@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axiosInstance';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
 import '../css/style.css';
 
@@ -24,6 +25,12 @@ const ExcelIcon = () => (
 );
 
 const BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL;
+
+// ============================================================================
+// PENTING UNTUK GAMBAR LOGO:
+// Taruh file gambar logo kamu (misal: jec-logo.png) di dalam folder "public"
+// ============================================================================
+const LOGO_JEC_URL = '/jec-logo.png';
 
 const sharedStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -352,7 +359,6 @@ const sharedStyles = `
   }
   .bk-search-input:focus { border-color: #14a058; }
 
-  /* ── Tombol Export Excel dalam filter bar ── */
   .bk-excel-btn {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 7px 16px; border-radius: 10px; border: none;
@@ -369,6 +375,8 @@ const sharedStyles = `
 `;
 
 const Flacs = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showDetailModal, setShowDetailModal] = useState(false);
@@ -378,6 +386,7 @@ const Flacs = () => {
     const [toast, setToast] = useState('');
     const [confirmDelete, setConfirmDelete] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [isPdfLoading, setIsPdfLoading] = useState(false);
 
     const showToast = (msg) => {
         setToast(msg);
@@ -396,6 +405,20 @@ const Flacs = () => {
     };
 
     useEffect(() => { fetchBookings(); }, []);
+
+    // LOGIKA AUTO OPEN MODAL DARI DASHBOARD
+    useEffect(() => {
+        if (bookings.length > 0 && location.state?.openDetailId) {
+            const targetId = location.state.openDetailId;
+            const itemToOpen = bookings.find(b => b.id === targetId);
+            
+            if (itemToOpen) {
+                setSelectedDetail(itemToOpen);
+                setShowDetailModal(true);
+            }
+            navigate('.', { replace: true, state: {} });
+        }
+    }, [bookings, location.state, navigate]);
 
     const handleStatusChange = async (id, newStatus) => {
         try {
@@ -502,54 +525,582 @@ const Flacs = () => {
     const fallbackAvatar = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><rect width='80' height='80' rx='40' fill='%23e0e0e0'/><circle cx='40' cy='30' r='15' fill='%23bdbdbd'/><ellipse cx='40' cy='65' rx='22' ry='15' fill='%23bdbdbd'/></svg>`;
     const fallbackBuilding = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><rect width='80' height='80' fill='%23e3f2fd'/><rect x='15' y='25' width='50' height='40' fill='%2390caf9'/><rect x='30' y='45' width='20' height='20' fill='%231565c0'/><rect x='10' y='20' width='60' height='8' fill='%231565c0'/></svg>`;
 
-    const handleDownloadPDF = () => {
+    // ====================================================================
+    // FUNGSI DOWNLOAD PDF — html2canvas → jsPDF
+    // Menggunakan HTML yang IDENTIK dengan handlePrint agar tampilan PDF = Print
+    // ====================================================================
+    const handleDownloadPDF = async () => {
         if (!selectedDetail) return;
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        doc.setFillColor(34, 153, 84);
-        doc.rect(0, 0, 210, 30, 'F');
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(18);
-        doc.setTextColor(255, 255, 255);
-        doc.text('INVOICE BOOKING FLACS', 15, 15);
-        doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-        doc.text('JEC Eye Hospitals & Clinics', 15, 22);
-        doc.setTextColor(40, 40, 40); doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-        doc.text(`No. Invoice: ${selectedDetail.no_invoice}`, 15, 40);
-        autoTable(doc, {
-            startY: 45,
-            head: [['Kategori', 'Detail Informasi']],
-            body: [
-                ['Nama Pasien', selectedDetail.nama_pasien],
-                ['Nomor WhatsApp', selectedDetail.nomor_wa],
-                ['Tanggal Kedatangan', new Date(selectedDetail.tgl_kedatangan).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })],
-                ['Fasilitas / Klinik', selectedDetail.fasilitas_name || '-'],
-                ['Dokter Tujuan', selectedDetail.nama_dokter || '-'],
-                ['Spesialisasi', selectedDetail.dokter_spesialis || '-'],
-                ['Status', selectedDetail.status ? selectedDetail.status.toUpperCase() : 'PENDING'],
-            ],
-            headStyles: { fillColor: [34, 153, 84] },
-            alternateRowStyles: { fillColor: [247, 252, 249] },
-            theme: 'grid'
+        setIsPdfLoading(true);
+
+        const tgl = new Date(selectedDetail.tgl_kedatangan).toLocaleDateString('id-ID', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
         });
-        doc.save(`Booking-FLACS-${selectedDetail.no_invoice}.pdf`);
+
+        const statusClass =
+            ['selesai', 'dikonfirmasi', 'confirmed'].includes((selectedDetail.status || '').toLowerCase()) ? 'success' :
+            ['pending', 'menunggu'].includes((selectedDetail.status || '').toLowerCase()) ? 'warning' :
+            ['batal', 'cancelled', 'ditolak'].includes((selectedDetail.status || '').toLowerCase()) ? 'danger' : 'secondary';
+
+        const statusLabel = selectedDetail.status ? selectedDetail.status.toUpperCase() : 'PENDING';
+
+        // Buat container sementara, render HTML persis seperti print
+        const container = document.createElement('div');
+        container.style.cssText = `
+            position: fixed;
+            top: -99999px;
+            left: -99999px;
+            width: 794px;
+            background: #fff;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #3c3c3c;
+            box-sizing: border-box;
+        `;
+
+        container.innerHTML = `
+            <style>
+                * { box-sizing: border-box; margin: 0; padding: 0; }
+                .page-container {
+                    padding: 56.69px;
+                    position: relative;
+                    min-height: 1122px;
+                    background: #fff;
+                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                    color: #3c3c3c;
+                }
+                .top-accent {
+                    background-color: #14a058 !important;
+                    height: 15px;
+                    width: 100%;
+                    position: absolute;
+                    top: 0; left: 0;
+                }
+                .header { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
+                .logo-img { height: 75px; object-fit: contain; display: block; }
+                .logo-fallback { font-size: 30px; font-weight: 900; color: #14a058; line-height: 1; }
+                .logo-fallback span { display: block; font-size: 11px; font-weight: 400; color: #888; margin-top: 4px; }
+                .invoice-title { font-size: 34px; font-weight: bold; color: #282828; margin: 0; text-align: right; line-height: 1; }
+                .invoice-meta { font-size: 13px; color: #666; text-align: right; margin-top: 8px; line-height: 1.6; }
+                .divider { border: none; border-top: 1px solid #e6e6e6; margin: 22px 0 26px; }
+                .info-section { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
+                .info-block {
+                    width: 48%;
+                    background: #f8fcf9;
+                    border: 1px solid #d8eee2;
+                    border-radius: 8px;
+                    padding: 14px 16px;
+                }
+                .info-label {
+                    font-size: 9px; color: #14a058; font-weight: 800;
+                    margin-bottom: 8px; text-transform: uppercase;
+                    letter-spacing: 0.08em;
+                    padding-bottom: 6px;
+                    border-bottom: 1px solid #d4edd9;
+                }
+                .info-value-main { font-size: 16px; font-weight: 800; color: #181818; margin-bottom: 5px; }
+                .info-value-sub { font-size: 12.5px; color: #666; margin-bottom: 3px; line-height: 1.5; }
+                .info-value-sub.muted { color: #aaa; font-size: 11.5px; }
+                .info-value-bold { font-size: 13.5px; font-weight: 700; color: #282828; margin-top: 7px; margin-bottom: 3px; }
+                .section-label {
+                    font-size: 9px; font-weight: 800; color: #14a058;
+                    text-transform: uppercase; letter-spacing: 0.1em;
+                    margin-bottom: 6px;
+                    display: flex; align-items: center; gap: 6px;
+                }
+                .section-label::after {
+                    content: ''; flex: 1; height: 1.5px; background: #14a058; opacity: 0.4;
+                }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 26px; table-layout: fixed; }
+                col.col-desc   { width: 34%; }
+                col.col-dokter { width: 28%; }
+                col.col-jadwal { width: 24%; }
+                col.col-status { width: 14%; }
+                th {
+                    background: #f0faf5 !important;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                    color: #14a058;
+                    padding: 11px 13px;
+                    text-align: left;
+                    font-size: 11px;
+                    font-weight: 800;
+                    border-top: 1.5px solid #cceadb;
+                    border-bottom: 1.5px solid #cceadb;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    overflow: hidden;
+                }
+                th.col-status-h { text-align: center; }
+                td {
+                    padding: 13px 13px;
+                    font-size: 13px;
+                    border-bottom: 1px solid #eaf4ed;
+                    color: #404040;
+                    vertical-align: middle;
+                    line-height: 1.5;
+                    overflow: hidden;
+                }
+                td.col-status-d { text-align: center; }
+                td strong { color: #1a1a1a; display: block; margin-bottom: 3px; }
+                td span.sub { font-size: 11.5px; color: #888; }
+                .status-badge {
+                    display: inline-block;
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    font-size: 10.5px;
+                    font-weight: 800;
+                    text-transform: uppercase;
+                    letter-spacing: 0.04em;
+                    white-space: nowrap;
+                }
+                .status-badge.success { background: #d4f5e2 !important; color: #0b7a3e !important; }
+                .status-badge.warning { background: #fff3cd !important; color: #856404 !important; }
+                .status-badge.danger  { background: #fde8e8 !important; color: #c0392b !important; }
+                .status-badge.secondary { background: #eee !important; color: #555 !important; }
+                .notes-title {
+                    font-size: 9px; font-weight: 800; color: #14a058;
+                    text-transform: uppercase; letter-spacing: 0.1em;
+                    margin-bottom: 8px;
+                }
+                .notes-box {
+                    background: #f5fcf8 !important;
+                    border: 1px solid #d0eadb;
+                    border-left: 5px solid #14a058 !important;
+                    border-radius: 6px;
+                    padding: 12px 16px;
+                    margin-bottom: 36px;
+                }
+                .notes-box p {
+                    margin: 0 0 5px;
+                    font-size: 12px;
+                    color: #555;
+                    line-height: 1.6;
+                }
+                .notes-box p:last-child { margin-bottom: 0; }
+                .footer {
+                    position: absolute;
+                    bottom: 40px;
+                    left: 56.69px;
+                    right: 56.69px;
+                    text-align: center;
+                    border-top: 2px solid #14a058;
+                    padding-top: 10px;
+                }
+                .footer p.main { margin: 0 0 5px 0; font-size: 12.5px; color: #828282; }
+                .footer p.sub  { margin: 0; font-size: 11.5px; color: #aaa; }
+            </style>
+
+            <div class="page-container">
+                <div class="top-accent"></div>
+
+                <div class="header">
+                    <div>
+                        <img src="${LOGO_JEC_URL}" alt="JEC Logo" class="logo-img"
+                             onerror="this.outerHTML='<div class=\\'logo-fallback\\'>JEC<span>Eye Hospitals &amp; Clinics</span></div>'" />
+                    </div>
+                    <div>
+                        <h2 class="invoice-title">INVOICE</h2>
+                        <div class="invoice-meta">
+                            No. Invoice: ${selectedDetail.no_invoice}<br>
+                            Dicetak Pada: ${new Date().toLocaleDateString('id-ID')}
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="divider" />
+
+                <div class="info-section">
+                    <div class="info-block">
+                        <div class="info-label">Informasi Pasien</div>
+                        <div class="info-value-main">${selectedDetail.nama_pasien || '-'}</div>
+                        <div class="info-value-sub">User: ${selectedDetail.user_name || '-'}</div>
+                        <div class="info-value-sub">WhatsApp: ${selectedDetail.nomor_wa || '-'}</div>
+                        ${selectedDetail.user_email ? `<div class="info-value-sub">Email: ${selectedDetail.user_email}</div>` : ''}
+                        ${(selectedDetail.city_name || selectedDetail.province_name)
+                            ? `<div class="info-value-sub muted">${[selectedDetail.district_name, selectedDetail.city_name, selectedDetail.province_name].filter(Boolean).join(', ')}</div>`
+                            : ''}
+                    </div>
+                    <div class="info-block">
+                        <div class="info-label">Lokasi &amp; Dokter</div>
+                        <div class="info-value-main">${selectedDetail.fasilitas_name || '-'}</div>
+                        <div class="info-value-sub">Tipe: ${selectedDetail.fasilitas_type || 'Rumah Sakit'}</div>
+                        <div class="info-value-bold">${selectedDetail.nama_dokter || '-'}</div>
+                        <div class="info-value-sub muted">${selectedDetail.dokter_spesialis || 'Dokter Spesialis Mata'}</div>
+                    </div>
+                </div>
+
+                <div class="section-label">Detail Layanan</div>
+                <table>
+                    <colgroup>
+                        <col class="col-desc">
+                        <col class="col-dokter">
+                        <col class="col-jadwal">
+                        <col class="col-status">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>Deskripsi Layanan</th>
+                            <th>Dokter Spesialis</th>
+                            <th>Jadwal Kedatangan</th>
+                            <th class="col-status-h">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <strong>Booking Layanan FLACS</strong>
+                                <span class="sub">${selectedDetail.fasilitas_name || ''}</span>
+                            </td>
+                            <td>
+                                <strong>${selectedDetail.nama_dokter || '-'}</strong>
+                                <span class="sub">${selectedDetail.dokter_spesialis || 'Spesialis Mata'}</span>
+                            </td>
+                            <td>${tgl}</td>
+                            <td class="col-status-d">
+                                <span class="status-badge ${statusClass}">${statusLabel}</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="notes-title">Catatan Penting</div>
+                <div class="notes-box">
+                    <p>• Harap tiba 30 menit sebelum jadwal yang ditentukan untuk proses administrasi.</p>
+                    <p>• Bawa kartu identitas (KTP/SIM) dan dokumen ini sebagai bukti booking.</p>
+                    <p>• Hubungi Call Center 0804-122-1000 apabila ada perubahan jadwal.</p>
+                </div>
+
+                <div class="footer">
+                    <p class="main">JEC Eye Hospitals &amp; Clinics | www.jec.co.id | Call Center: 0804-122-1000</p>
+                    <p class="sub">Dokumen ini dicetak secara otomatis oleh sistem dan sah tanpa tanda tangan fisik.</p>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(container);
+
+        try {
+            // Tunggu gambar logo selesai load (jika ada)
+            const logoImg = container.querySelector('.logo-img');
+            if (logoImg) {
+                await new Promise((resolve) => {
+                    if (logoImg.complete) { resolve(); return; }
+                    logoImg.onload = resolve;
+                    logoImg.onerror = resolve;
+                    setTimeout(resolve, 2000); // fallback timeout
+                });
+            }
+
+            const canvas = await html2canvas(container.querySelector('.page-container'), {
+                scale: 2,           // 2x untuk kualitas tajam
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                width: 794,
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.97);
+
+            // A4: 210mm x 297mm → dalam pt: 595.28 x 841.89
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+            const pageWidth  = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+
+            const canvasWidth  = canvas.width;
+            const canvasHeight = canvas.height;
+
+            // Hitung tinggi gambar proporsional sesuai lebar halaman PDF
+            const imgHeightInPt = (canvasHeight / canvasWidth) * pageWidth;
+
+            // Jika konten > 1 halaman, potong per halaman
+            let yOffset = 0;
+            while (yOffset < imgHeightInPt) {
+                if (yOffset > 0) doc.addPage();
+                doc.addImage(
+                    imgData, 'JPEG',
+                    0, -yOffset,
+                    pageWidth, imgHeightInPt,
+                    undefined, 'FAST'
+                );
+                yOffset += pageHeight;
+            }
+
+            doc.save(`Invoice-FLACS-${selectedDetail.no_invoice}.pdf`);
+        } catch (err) {
+            console.error('Gagal membuat PDF:', err);
+            showToast('Gagal membuat PDF. Coba lagi.');
+        } finally {
+            document.body.removeChild(container);
+            setIsPdfLoading(false);
+        }
     };
 
+    // ====================================================================
+    // FUNGSI PRINT WINDOW — Layout identik dengan PDF
+    // ====================================================================
     const handlePrint = () => {
         if (!selectedDetail) return;
-        const tgl = new Date(selectedDetail.tgl_kedatangan).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-        const printWindow = window.open('', '', 'height=700,width=800');
-        printWindow.document.write(`<html><head><title>Cetak Booking - ${selectedDetail.no_invoice}</title>
-            <style>body{font-family:Arial,sans-serif;color:#333;padding:20px;}.header{background:#14a058;color:#fff;padding:20px;border-radius:8px 8px 0 0;}.content{border:1px solid #ddd;padding:30px;border-radius:0 0 8px 8px;}table{width:100%;border-collapse:collapse;margin-top:20px;}th,td{padding:12px;text-align:left;border-bottom:1px solid #eee;}th{background:#f4fcf6;color:#14a058;width:30%;}.badge{display:inline-block;padding:5px 10px;background:#14a058;color:#fff;border-radius:4px;font-weight:bold;}</style></head>
-            <body><div class="header"><h1 style="margin:0">BUKTI BOOKING FLACS</h1><p style="margin:5px 0 0">JEC Eye Hospitals & Clinics</p></div>
-            <div class="content"><h2 style="color:#14a058">Invoice: ${selectedDetail.no_invoice}</h2>
-            <table><tr><th>Nama Pasien</th><td>${selectedDetail.nama_pasien}</td></tr>
-            <tr><th>Nomor WA</th><td>${selectedDetail.nomor_wa}</td></tr>
-            <tr><th>Tanggal Kedatangan</th><td><strong>${tgl}</strong></td></tr>
-            <tr><th>Fasilitas</th><td>${selectedDetail.fasilitas_name || '-'}</td></tr>
-            <tr><th>Dokter Tujuan</th><td>${selectedDetail.nama_dokter || '-'} (${selectedDetail.dokter_spesialis || '-'})</td></tr>
-            <tr><th>Status</th><td><span class="badge">${selectedDetail.status ? selectedDetail.status.toUpperCase() : 'PENDING'}</span></td></tr></table>
-            <p style="text-align:center;margin-top:40px;font-size:.9em;color:#777">Dicetak otomatis pada ${new Date().toLocaleString('id-ID')}</p></div></body></html>`);
-        printWindow.document.close(); printWindow.focus();
-        setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+        const tgl = new Date(selectedDetail.tgl_kedatangan).toLocaleDateString('id-ID', { 
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' 
+        });
+        
+        const printWindow = window.open('', '', 'height=800,width=800');
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Cetak Booking - ${selectedDetail.no_invoice}</title>
+                <style>
+                    @page { margin: 0; size: A4 portrait; }
+                    body { 
+                        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+                        color: #3c3c3c; 
+                        margin: 0; 
+                        padding: 0; 
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    .page-container { 
+                        padding: 15mm; 
+                        position: relative; 
+                        min-height: 260mm; 
+                        box-sizing: border-box; 
+                    }
+                    
+                    /* Aksen Garis Hijau Atas */
+                    .top-accent {
+                        background-color: #14a058 !important;
+                        height: 4mm;
+                        width: 100%;
+                        position: absolute;
+                        top: 0; left: 0;
+                    }
+                    
+                    /* Header dengan Logo JEC */
+                    .header { display: flex; justify-content: space-between; align-items: center; margin-top: 5mm; }
+                    .logo-img { height: 75px; object-fit: contain; display: block; }
+                    
+                    .invoice-title { font-size: 32px; font-weight: bold; color: #282828; margin: 0; text-align: right; line-height: 1;}
+                    .invoice-meta { font-size: 13px; color: #666; text-align: right; margin-top: 8px; line-height: 1.5; }
+                    
+                    .divider { border-top: 1px solid #e6e6e6; margin-top: 8mm; margin-bottom: 10mm; }
+                    
+                    /* 2 Kolom Info */
+                    .info-section { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10mm; }
+                    .info-block {
+                        width: 48%;
+                        background: #f8fcf9;
+                        border: 1px solid #d8eee2;
+                        border-radius: 8px;
+                        padding: 12px 14px;
+                        box-sizing: border-box;
+                    }
+                    .info-label {
+                        font-size: 9px; color: #14a058; font-weight: 800;
+                        margin-bottom: 6px; text-transform: uppercase;
+                        letter-spacing: 0.08em;
+                        padding-bottom: 5px;
+                        border-bottom: 1px solid #d4edd9;
+                    }
+                    .info-value-main { font-size: 15px; font-weight: 800; color: #181818; margin-bottom: 4px; }
+                    .info-value-sub { font-size: 12px; color: #666; margin-bottom: 2px; line-height: 1.5; }
+                    .info-value-sub.muted { color: #aaa; font-size: 11px; }
+                    .info-value-bold { font-size: 13px; font-weight: 700; color: #282828; margin-top: 6px; margin-bottom: 2px; }
+                    
+                    /* Section Label */
+                    .section-label {
+                        font-size: 9px; font-weight: 800; color: #14a058;
+                        text-transform: uppercase; letter-spacing: 0.1em;
+                        margin-bottom: 5px;
+                        display: flex; align-items: center; gap: 6px;
+                    }
+                    .section-label::after {
+                        content: ''; flex: 1; height: 1.5px; background: #14a058; opacity: 0.4;
+                    }
+
+                    /* Tabel Clean */
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 8mm; table-layout: fixed; }
+                    col.col-desc   { width: 34%; }
+                    col.col-dokter { width: 28%; }
+                    col.col-jadwal { width: 24%; }
+                    col.col-status { width: 14%; }
+                    th { 
+                        background: #f0faf5; 
+                        color: #14a058; 
+                        padding: 10px 12px; 
+                        text-align: left; 
+                        font-size: 11px; 
+                        font-weight: 800;
+                        border-top: 1.5px solid #cceadb; 
+                        border-bottom: 1.5px solid #cceadb; 
+                        text-transform: uppercase;
+                        letter-spacing: 0.05em;
+                        overflow: hidden;
+                    }
+                    th.col-status-h { text-align: center; }
+                    td { 
+                        padding: 12px 12px; 
+                        font-size: 12.5px; 
+                        border-bottom: 1px solid #eaf4ed; 
+                        color: #404040; 
+                        vertical-align: middle;
+                        line-height: 1.5;
+                        overflow: hidden;
+                    }
+                    td.col-status-d { text-align: center; }
+                    td strong { color: #1a1a1a; display: block; margin-bottom: 2px; }
+                    td span.sub { font-size: 11px; color: #888; }
+                    td .status-badge {
+                        display: inline-block;
+                        padding: 4px 10px;
+                        border-radius: 20px;
+                        font-size: 10px;
+                        font-weight: 800;
+                        text-transform: uppercase;
+                        letter-spacing: 0.04em;
+                        white-space: nowrap;
+                    }
+                    td .status-badge.success { background: #d4f5e2; color: #0b7a3e; }
+                    td .status-badge.warning { background: #fff3cd; color: #856404; }
+                    td .status-badge.danger  { background: #fde8e8; color: #c0392b; }
+                    td .status-badge.secondary { background: #eee; color: #555; }
+
+                    /* Catatan */
+                    .notes-box {
+                        background: #f5fcf8;
+                        border: 1px solid #d0eadb;
+                        border-left: 4px solid #14a058;
+                        border-radius: 6px;
+                        padding: 10px 14px;
+                        margin-bottom: 12mm;
+                    }
+                    .notes-box p {
+                        margin: 0 0 4px;
+                        font-size: 11.5px;
+                        color: #555;
+                        line-height: 1.6;
+                    }
+                    .notes-box p:last-child { margin-bottom: 0; }
+                    .notes-title {
+                        font-size: 9px; font-weight: 800; color: #14a058;
+                        text-transform: uppercase; letter-spacing: 0.1em;
+                        margin-bottom: 7px;
+                    }
+                    
+                    /* Footer Fix di Bawah */
+                    .footer { 
+                        position: absolute; 
+                        bottom: 15mm; 
+                        left: 15mm; 
+                        right: 15mm; 
+                        text-align: center; 
+                        border-top: 2px solid #14a058; 
+                        padding-top: 8px; 
+                    }
+                    .footer p.main { margin: 0 0 4px 0; font-size: 12px; color: #828282; }
+                    .footer p.sub { margin: 0; font-size: 11px; color: #aaaaaa; }
+                </style>
+            </head>
+            <body>
+                <div class="top-accent"></div>
+                <div class="page-container">
+                    
+                    <div class="header">
+                        <div>
+                            <img src="${LOGO_JEC_URL}" alt="JEC Logo" class="logo-img" onerror="this.style.display='none'" />
+                        </div>
+                        <div>
+                            <h2 class="invoice-title">INVOICE</h2>
+                            <div class="invoice-meta">
+                                No. Invoice: ${selectedDetail.no_invoice}<br>
+                                Dicetak Pada: ${new Date().toLocaleDateString('id-ID')}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="divider"></div>
+                    
+                    <div class="info-section">
+                        <div class="info-block">
+                            <div class="info-label">Informasi Pasien</div>
+                            <div class="info-value-main">${selectedDetail.nama_pasien || '-'}</div>
+                            <div class="info-value-sub">User: ${selectedDetail.user_name || '-'}</div>
+                            <div class="info-value-sub">WhatsApp: ${selectedDetail.nomor_wa || '-'}</div>
+                            ${selectedDetail.user_email ? `<div class="info-value-sub">Email: ${selectedDetail.user_email}</div>` : ''}
+                            ${(selectedDetail.city_name || selectedDetail.province_name) ? `<div class="info-value-sub muted">${[selectedDetail.district_name, selectedDetail.city_name, selectedDetail.province_name].filter(Boolean).join(', ')}</div>` : ''}
+                        </div>
+                        <div class="info-block">
+                            <div class="info-label">Lokasi &amp; Dokter</div>
+                            <div class="info-value-main">${selectedDetail.fasilitas_name || '-'}</div>
+                            <div class="info-value-sub">Tipe: ${selectedDetail.fasilitas_type || 'Rumah Sakit'}</div>
+                            <div class="info-value-bold">${selectedDetail.nama_dokter || '-'}</div>
+                            <div class="info-value-sub muted">${selectedDetail.dokter_spesialis || 'Dokter Spesialis Mata'}</div>
+                        </div>
+                    </div>
+
+                    <div class="section-label">Detail Layanan</div>
+                    <table>
+                        <colgroup>
+                            <col class="col-desc">
+                            <col class="col-dokter">
+                            <col class="col-jadwal">
+                            <col class="col-status">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>Deskripsi Layanan</th>
+                                <th>Dokter Spesialis</th>
+                                <th>Jadwal Kedatangan</th>
+                                <th class="col-status-h">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <strong>Booking Layanan FLACS</strong>
+                                    <span class="sub">${selectedDetail.fasilitas_name || ''}</span>
+                                </td>
+                                <td>
+                                    <strong>${selectedDetail.nama_dokter || '-'}</strong>
+                                    <span class="sub">${selectedDetail.dokter_spesialis || 'Spesialis Mata'}</span>
+                                </td>
+                                <td>${tgl}</td>
+                                <td class="col-status-d">
+                                    <span class="status-badge ${
+                                        ['selesai','dikonfirmasi','confirmed'].includes((selectedDetail.status||'').toLowerCase()) ? 'success' :
+                                        ['pending','menunggu'].includes((selectedDetail.status||'').toLowerCase()) ? 'warning' :
+                                        ['batal','cancelled','ditolak'].includes((selectedDetail.status||'').toLowerCase()) ? 'danger' : 'secondary'
+                                    }">
+                                        ${selectedDetail.status ? selectedDetail.status.toUpperCase() : 'PENDING'}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="notes-title">Catatan Penting</div>
+                    <div class="notes-box">
+                        <p>• Harap tiba 30 menit sebelum jadwal yang ditentukan untuk proses administrasi.</p>
+                        <p>• Bawa kartu identitas (KTP/SIM) dan dokumen ini sebagai bukti booking.</p>
+                        <p>• Hubungi Call Center 0804-122-1000 apabila ada perubahan jadwal.</p>
+                    </div>
+                    
+                    <div class="footer">
+                        <p class="main">JEC Eye Hospitals & Clinics | www.jec.co.id | Call Center: 0804-122-1000</p>
+                        <p class="sub">Dokumen ini dicetak secara otomatis oleh sistem dan sah tanpa tanda tangan fisik.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close(); 
+        printWindow.focus();
+        
+        setTimeout(() => { 
+            printWindow.print(); 
+            printWindow.close(); 
+        }, 500);
     };
 
     const statusOptions = ['Semua', 'Pending', 'Dikonfirmasi', 'Selesai', 'Batal'];
@@ -751,9 +1302,11 @@ const Flacs = () => {
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                                 Print
                             </button>
-                            <button className="fm-btn fm-btn-pdf" onClick={handleDownloadPDF}>
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                Cetak PDF
+                            <button className="fm-btn fm-btn-pdf" onClick={handleDownloadPDF} disabled={isPdfLoading}>
+                                {isPdfLoading
+                                    ? <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{animation:'bk-spin .7s linear infinite'}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Memproses...</>
+                                    : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Cetak PDF</>
+                                }
                             </button>
                         </div>
                     </div>

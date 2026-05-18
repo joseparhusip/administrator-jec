@@ -1,6 +1,7 @@
 // path: path/to/your/frontend/components/Dashboard.jsx
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // IMPORT INI
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -8,6 +9,8 @@ import {
 import '../css/style.css';
 
 function Dashboard() {
+  const navigate = useNavigate(); // INISIALISASI NAVIGATE
+
   const [stats, setStats] = useState({
     totalUsers: 0, totalRS: 0, totalObat: 0, totalCoin: 0, totalCart: 0,
     totalPromo: 0, totalTestimoni: 0, totalVideos: 0, totalEvent: 0, totalJournal: 0
@@ -137,6 +140,19 @@ function Dashboard() {
     fetchDashboardData();
   }, []);
 
+  // FUNGSI BARU: Lempar user ke halaman terkait dengan membawa ID
+  const handleNavigateToDetail = (type, actionId) => {
+    if (!actionId) return;
+
+    if (type.toLowerCase() === 'lasik') {
+      navigate('/layanan/lasik', { state: { openDetailId: actionId } });
+    } else if (type.toLowerCase() === 'flacs') {
+      navigate('/layanan/flacs', { state: { openDetailId: actionId } });
+    } else if (type.toLowerCase() === 'obat') {
+      navigate('/pesanan', { state: { openDetailId: actionId } });
+    }
+  };
+
   return (
     <div className="dashboard-page">
       <div className="dashboard-header">
@@ -179,7 +195,6 @@ function Dashboard() {
           <ul className="pending-list">
             {pendingActions.length > 0 ? (
               pendingActions.map((action, index) => {
-                // Tentukan class warna badge berdasarkan tipe
                 const tagClass = action.type.toLowerCase() === 'lasik' ? 'tag-lasik' : 
                                  action.type.toLowerCase() === 'flacs' ? 'tag-flacs' : 
                                  action.type.toLowerCase() === 'obat' ? 'tag-obat' : 'tag-default';
@@ -197,7 +212,13 @@ function Dashboard() {
                         {formatDateTimeIndo(action.created_at)}
                       </span>
                     </div>
-                    <button className="btn-proses">Proses ➔</button>
+                    {/* MODIFIED: Panggil fungsi navigasi */}
+                    <button 
+                      className="btn-proses" 
+                      onClick={() => handleNavigateToDetail(action.type, action.action_id)}
+                    >
+                      Proses ➔
+                    </button>
                   </li>
                 );
               })
