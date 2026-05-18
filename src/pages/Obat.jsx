@@ -89,6 +89,7 @@ function InstruksiObat() {
         <li><strong>Nama Obat:</strong> Tulis nama resmi obat sesuai kemasan (contoh: <em>Paracetamol 500mg</em>).</li>
         <li><strong>Deskripsi:</strong> Isi kegunaan utama obat, maksimal <strong>100 huruf</strong>.</li>
         <li><strong>Harga:</strong> Masukkan harga satuan dalam Rupiah, tanpa titik atau koma.</li>
+        <li><strong>Stok:</strong> Masukkan ketersediaan stok fisik obat di apotek.</li>
         <li><strong>Gambar:</strong> Upload foto kemasan obat, format JPG/PNG/WEBP, maks. 500KB.</li>
       </ul>
     </div>
@@ -97,12 +98,14 @@ function InstruksiObat() {
 
 function ObatCard({ obat, onViewDetail }) {
   const imageUrl = obat.image_url ? `${IMG_URL}/${obat.image_url}` : null;
+  // Logika warna stok
+  const isHabis = obat.stok <= 0;
 
   return (
     <div className="obat-card">
       <div className="obat-card-image-wrap">
         {imageUrl ? (
-          <img src={imageUrl} alt={obat.nama} className="obat-card-image" />
+          <img src={imageUrl} alt={obat.nama} className="obat-card-image" style={{ filter: isHabis ? 'grayscale(100%)' : 'none' }} />
         ) : (
           <div className="obat-card-image-placeholder">
             <span>💊</span>
@@ -114,7 +117,12 @@ function ObatCard({ obat, onViewDetail }) {
         <div className="obat-card-info-row">
           <div className="obat-card-name-wrap">
             <h3 className="obat-card-name">{obat.nama}</h3>
-            <p className="obat-card-id">ID: {obat.obat_id}</p>
+            <p className="obat-card-id" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>ID: {obat.obat_id}</span>
+              <span style={{ color: isHabis ? '#e53e3e' : '#2e7d32', fontWeight: 'bold', fontSize: '0.8rem', background: isHabis ? '#fff5f5' : '#e8f5e9', padding: '2px 6px', borderRadius: '4px' }}>
+                Stok: {obat.stok}
+              </span>
+            </p>
           </div>
           <span className="obat-card-price">
             Rp {Number(obat.harga).toLocaleString('id-ID')}
@@ -176,8 +184,14 @@ function DetailObatModal({ obat, onClose, onEdit, onDelete }) {
                 <span className="detail-value">Rp {Number(obat.harga).toLocaleString('id-ID')}</span>
               </div>
               <div className="detail-item">
-                <span className="detail-label">Ketersediaan Gambar</span>
-                <span className="detail-value">{obat.image_url ? 'Ada' : 'Tidak Ada'}</span>
+                <span className="detail-label">Sisa Stok</span>
+                <span className="detail-value" style={{ color: obat.stok <= 0 ? '#e53e3e' : '#2e7d32' }}>
+                  {obat.stok} Pcs
+                </span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Gambar</span>
+                <span className="detail-value">{obat.image_url ? 'Tersedia' : 'Tidak Ada'}</span>
               </div>
             </div>
           </div>
@@ -205,12 +219,15 @@ function Obat() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
-  const [formData, setFormData] = useState({ nama: '', deskripsi: '', harga: '', image_file: null });
+  // ✅ Tambahkan property stok
+  const [formData, setFormData] = useState({ nama: '', deskripsi: '', harga: '', stok: '', image_file: null });
   const [addImagePreview, setAddImagePreview] = useState(null);
+  
   const [selectedObat, setSelectedObat] = useState(null);
-  const [editFormData, setEditFormData] = useState({ obat_id: '', nama: '', deskripsi: '', harga: '', image_file: null });
+  const [editFormData, setEditFormData] = useState({ obat_id: '', nama: '', deskripsi: '', harga: '', stok: '', image_file: null });
   const [editImagePreview, setEditImagePreview] = useState(null);
   const [currentImagePath, setCurrentImagePath] = useState('');
+  
   const [itemToDelete, setItemToDelete] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
 
@@ -264,6 +281,7 @@ function Obat() {
     data.append('nama', formData.nama);
     data.append('deskripsi', formData.deskripsi);
     data.append('harga', formData.harga);
+    data.append('stok', formData.stok); // ✅ Push stok
     data.append('image_url', formData.image_file);
     try {
       await axios.post(`${API_URL}/admin/obat`, data, {
@@ -271,7 +289,7 @@ function Obat() {
       });
       setToastMessage('Data obat baru berhasil ditambahkan.');
       setIsModalOpen(false);
-      setFormData({ nama: '', deskripsi: '', harga: '', image_file: null });
+      setFormData({ nama: '', deskripsi: '', harga: '', stok: '', image_file: null });
       setAddImagePreview(null);
       fetchObatData();
     } catch (err) {
@@ -283,7 +301,14 @@ function Obat() {
   const handleOpenEditModal = (obat) => {
     setViewingObat(null);
     setSelectedObat(obat);
-    setEditFormData({ obat_id: obat.obat_id, nama: obat.nama, deskripsi: obat.deskripsi, harga: obat.harga, image_file: null });
+    setEditFormData({ 
+      obat_id: obat.obat_id, 
+      nama: obat.nama, 
+      deskripsi: obat.deskripsi, 
+      harga: obat.harga, 
+      stok: obat.stok, // ✅ Set stok untuk form
+      image_file: null 
+    });
     setCurrentImagePath(obat.image_url);
     setEditImagePreview(null);
     setIsEditModalOpen(true);
@@ -310,6 +335,7 @@ function Obat() {
     data.append('nama', editFormData.nama);
     data.append('deskripsi', editFormData.deskripsi);
     data.append('harga', editFormData.harga);
+    data.append('stok', editFormData.stok); // ✅ Push Stok
     if (editFormData.image_file) data.append('image_url', editFormData.image_file);
     try {
       await axios.put(`${API_URL}/admin/obat/${editFormData.obat_id}`, data, {
@@ -355,6 +381,7 @@ function Obat() {
         'Nama Obat': obat.nama || '-',
         'Deskripsi': obat.deskripsi || '-',
         'Harga (Rp)': Number(obat.harga) || 0,
+        'Sisa Stok': Number(obat.stok) || 0, // ✅ Masukkan stok ke Excel
         'Harga Teks': `Rp ${Number(obat.harga).toLocaleString('id-ID')}`,
         'Ada Gambar': obat.image_url ? 'Ya' : 'Tidak',
       }));
@@ -362,13 +389,14 @@ function Obat() {
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = [
         { wch: 5 }, { wch: 10 }, { wch: 28 },
-        { wch: 40 }, { wch: 16 }, { wch: 22 }, { wch: 12 },
+        { wch: 40 }, { wch: 16 }, { wch: 12 }, { wch: 22 }, { wch: 12 },
       ];
 
+      const totalStok = obatData.reduce((a, o) => a + (Number(o.stok) || 0), 0);
       const ringkasan = [
-        { 'Keterangan': 'Total Data Obat', 'Nilai': obatData.length },
-        { 'Keterangan': 'Obat Dengan Gambar', 'Nilai': obatData.filter(o => o.image_url).length },
-        { 'Keterangan': 'Obat Tanpa Gambar', 'Nilai': obatData.filter(o => !o.image_url).length },
+        { 'Keterangan': 'Total Jenis Obat', 'Nilai': obatData.length },
+        { 'Keterangan': 'Total Keseluruhan Stok (Pcs)', 'Nilai': totalStok },
+        { 'Keterangan': 'Obat Stok Habis', 'Nilai': obatData.filter(o => o.stok <= 0).length },
         { 'Keterangan': 'Harga Rata-rata (Rp)', 'Nilai': `Rp ${Math.round(obatData.reduce((a, o) => a + Number(o.harga), 0) / (obatData.length || 1)).toLocaleString('id-ID')}` },
         { 'Keterangan': 'Diekspor Pada', 'Nilai': new Date().toLocaleString('id-ID') },
       ];
@@ -405,23 +433,18 @@ function Obat() {
             />
           </div>
 
-          {/* ── Tombol Export Excel ── */}
           <button
             onClick={handleExportExcel}
             disabled={isExporting || loading || filteredObat.length === 0}
             style={{
               display: 'flex', alignItems: 'center', gap: '7px',
-              padding: '9px 18px',
-              backgroundColor: '#1D6F42',
+              padding: '9px 18px', backgroundColor: '#1D6F42',
               color: '#fff', border: 'none', borderRadius: '8px',
               fontSize: '0.855rem', fontWeight: '700', cursor: 'pointer',
               opacity: (isExporting || loading || filteredObat.length === 0) ? 0.6 : 1,
-              boxShadow: '0 2px 8px rgba(29,111,66,0.28)',
-              transition: 'background-color 0.2s, transform 0.15s',
+              boxShadow: '0 2px 8px rgba(29,111,66,0.28)', transition: 'background-color 0.2s, transform 0.15s',
               whiteSpace: 'nowrap',
             }}
-            onMouseEnter={e => { if (!isExporting) { e.currentTarget.style.backgroundColor = '#155534'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#1D6F42'; e.currentTarget.style.transform = 'translateY(0)'; }}
             title="Export data obat ke Excel"
           >
             <ExcelIcon />
@@ -493,9 +516,16 @@ function Obat() {
                   <label>Deskripsi</label>
                   <DeskripsiTextarea name="deskripsi" value={formData.deskripsi} onChange={handleFormChange} required rows={4} />
                 </div>
-                <div className="modal-form-group">
-                  <label>Harga</label>
-                  <input type="number" name="harga" value={formData.harga} onChange={handleFormChange} required />
+                <div className="form-grid">
+                  <div className="modal-form-group">
+                    <label>Harga (Rp)</label>
+                    <input type="number" name="harga" value={formData.harga} onChange={handleFormChange} required min="1" />
+                  </div>
+                  {/* ✅ Input Stok Tambah */}
+                  <div className="modal-form-group">
+                    <label>Stok Tersedia (Pcs)</label>
+                    <input type="number" name="stok" value={formData.stok} onChange={handleFormChange} required min="0" />
+                  </div>
                 </div>
                 <div className="modal-form-group">
                   <label>Gambar <span style={{ fontSize: '0.8rem', color: '#888' }}>(JPG/PNG/WEBP, maks. 500KB)</span></label>
@@ -536,14 +566,21 @@ function Obat() {
                   <label>Deskripsi</label>
                   <DeskripsiTextarea name="deskripsi" value={editFormData.deskripsi} onChange={handleEditFormChange} required rows={4} />
                 </div>
-                <div className="modal-form-group">
-                  <label>Harga</label>
-                  <input type="number" name="harga" value={editFormData.harga} onChange={handleEditFormChange} required />
+                <div className="form-grid">
+                  <div className="modal-form-group">
+                    <label>Harga (Rp)</label>
+                    <input type="number" name="harga" value={editFormData.harga} onChange={handleEditFormChange} required min="1" />
+                  </div>
+                  {/* ✅ Input Stok Edit */}
+                  <div className="modal-form-group">
+                    <label>Stok Tersedia (Pcs)</label>
+                    <input type="number" name="stok" value={editFormData.stok} onChange={handleEditFormChange} required min="0" />
+                  </div>
                 </div>
                 <div className="modal-form-group">
                   <label>Gambar Saat Ini</label>
                   {currentImagePath ? (
-                    <img src={`${IMG_URL}/${currentImagePath}`} alt="Preview" style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />
+                    <img src={`${IMG_URL}/${currentImagePath}`} alt="Preview" style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #ddd' }} />
                   ) : <span style={{ color: '#adb5bd', fontSize: '0.9rem' }}>Tidak ada gambar</span>}
                 </div>
                 <div className="modal-form-group">

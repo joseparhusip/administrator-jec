@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -61,6 +62,9 @@ const PAYMENT_STATUS_CONFIG = {
 };
 
 function Pesanan() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [pesananData, setPesananData] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPayment, setFilterPayment] = useState('semua');
@@ -111,6 +115,20 @@ function Pesanan() {
     const interval = setInterval(() => { fetchPesanan(true); }, 5000);
     return () => clearInterval(interval);
   }, [fetchPesanan]);
+
+  // LOGIKA AUTO OPEN MODAL DARI DASHBOARD
+  useEffect(() => {
+    if (pesananData.length > 0 && location.state?.openDetailId) {
+      const targetId = location.state.openDetailId;
+      const isExist = pesananData.find(p => p.pesanan_id === targetId);
+      
+      if (isExist) {
+        handleViewDetail(targetId);
+      }
+      
+      navigate('.', { replace: true, state: {} });
+    }
+  }, [pesananData, location.state, navigate]);
 
   // ── KONFIRMASI PAYMENT STATUS oleh Admin ─────────────────────────────────
   const handleUpdatePaymentStatus = async (pesananId, newStatus, e) => {
