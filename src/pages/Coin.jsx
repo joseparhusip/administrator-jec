@@ -31,7 +31,7 @@ const DEFAULT_AVATAR = (name) => {
 };
 
 const ExcelIcon = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
     <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z"
       fill="rgba(255,255,255,0.2)" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     <path d="M14 2V8H20" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -190,46 +190,45 @@ function Coin() {
       {/* ── Header ── */}
       <div className="crud-page-header">
         <h1>Manajemen Poin & Tier Pengguna</h1>
-        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            placeholder="Cari nama user..."
-            className="search-input"
-            style={{ margin: 0 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <select
-            className="filter-dropdown"
-            style={{ margin: 0, whiteSpace: 'nowrap' }}
-            value={filterTier}
-            onChange={(e) => setFilterTier(e.target.value)}
-          >
-            <option value="Semua">Semua Tier</option>
-            {TIERS.map(t => <option key={t} value={t}>{TIER_CONFIG[t].emoji} {t}</option>)}
-          </select>
+        
+        {/* ── KONTROL SEJAJAR SATU BARIS ── */}
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', flexWrap: 'nowrap', flex: 1, justifyContent: 'flex-end' }}>
+          
+          <div className="search-container" style={{ flex: 1, minWidth: '150px', maxWidth: '300px' }}>
+            <input
+              type="text"
+              placeholder="Cari nama user..."
+              className="search-input"
+              style={{ width: '100%', margin: 0 }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
 
-          {/* ── Tombol Export Excel ── */}
+          <div className="custom-dropdown-wrapper" style={{ minWidth: '160px' }}>
+            <select
+              className="modern-filter-dropdown"
+              value={filterTier}
+              onChange={(e) => setFilterTier(e.target.value)}
+            >
+              <option value="Semua">Semua Tier</option>
+              {TIERS.map(t => <option key={t} value={t}>{TIER_CONFIG[t].emoji} {t}</option>)}
+            </select>
+          </div>
+
           <button
             onClick={handleExportExcel}
             disabled={isExporting || isLoading || filteredUsers.length === 0}
             style={{
-              display: 'flex', alignItems: 'center', gap: '7px',
-              padding: '9px 18px',
-              backgroundColor: '#1D6F42',
-              color: '#fff', border: 'none', borderRadius: '8px',
-              fontSize: '0.855rem', fontWeight: '700', cursor: 'pointer',
-              opacity: (isExporting || isLoading || filteredUsers.length === 0) ? 0.6 : 1,
-              boxShadow: '0 2px 8px rgba(29,111,66,0.28)',
-              transition: 'background-color 0.2s, transform 0.15s',
-              whiteSpace: 'nowrap',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '42px', height: '42px', padding: '0', flexShrink: 0,
+              backgroundColor: '#1D6F42', color: '#fff', border: 'none', borderRadius: '10px',
+              cursor: 'pointer', opacity: (isExporting || isLoading || filteredUsers.length === 0) ? 0.6 : 1,
+              boxShadow: '0 2px 8px rgba(29,111,66,0.28)', transition: 'background-color 0.2s, transform 0.15s'
             }}
-            onMouseEnter={e => { if (!isExporting) { e.currentTarget.style.backgroundColor = '#155534'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#1D6F42'; e.currentTarget.style.transform = 'translateY(0)'; }}
             title="Export data poin & tier ke Excel"
           >
-            <ExcelIcon />
-            {isExporting ? 'Mengekspor...' : 'Export Excel'}
+            {isExporting ? <span style={{fontSize: '14px'}}>⏳</span> : <ExcelIcon />}
           </button>
         </div>
       </div>
@@ -276,103 +275,110 @@ function Coin() {
             const cfg = TIER_CONFIG[user.current_tier] || TIER_CONFIG.Bronze;
             return (
               <div
-                key={user.user_id}
-                className="coin-user-card"
-                onClick={() => handleOpenDetailModal(user)}
-                style={{ '--tier-color': cfg.color, '--tier-bg': cfg.bg, '--tier-border': cfg.border }}
-              >
-                <div className="coin-card-tier-badge" style={{ background: cfg.bg, color: cfg.textColor, border: `1.5px solid ${cfg.border}55` }}>
-                  {cfg.emoji} {user.current_tier}
-                </div>
+  key={user.user_id}
+  className="coin-user-card"
+  onClick={() => handleOpenDetailModal(user)}
+  style={{ '--tier-color': cfg.color, '--tier-bg': cfg.bg, '--tier-border': cfg.border }}
+>
+  {/* Banner Atas */}
+  <div className="coin-card-tier-badge">
+    {cfg.emoji} {user.current_tier}
+  </div>
 
-                <div className="coin-card-avatar-wrap">
-                  <img
-                    src={getAvatarUrl(user.profile_image, user.user_name)}
-                    alt={user.user_name}
-                    className="coin-card-avatar"
-                    onError={(e) => { e.target.src = DEFAULT_AVATAR(user.user_name); }}
-                  />
-                </div>
+  {/* Foto Numpuk */}
+  <div className="coin-card-avatar-wrap">
+    <img
+      src={getAvatarUrl(user.profile_image, user.user_name)}
+      alt={user.user_name}
+      className="coin-card-avatar"
+      onError={(e) => { e.target.src = DEFAULT_AVATAR(user.user_name); }}
+    />
+  </div>
 
-                <div className="coin-card-points-badge" style={{ background: cfg.color }}>
-                  🪙 {user.points.toLocaleString('id-ID')}
-                </div>
+  {/* Body (Poin ditaruh di dalam body agar rapi) */}
+  <div className="coin-card-body">
+    <div className="coin-card-points-badge" style={{ color: cfg.textColor }}>
+      🪙 {user.points.toLocaleString('id-ID')}
+    </div>
+    
+    <h3 className="coin-card-name">{user.user_name}</h3>
+    <p className="coin-card-id">ID #{user.user_id}</p>
+    <p className="coin-card-updated">
+      Update: {new Date(user.updated_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+    </p>
+  </div>
 
-                <div className="coin-card-body">
-                  <h3 className="coin-card-name">{user.user_name}</h3>
-                  <p className="coin-card-id">ID #{user.user_id}</p>
-                  <p className="coin-card-updated">
-                    Update: {new Date(user.updated_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </p>
-                </div>
-
-                <div className="coin-card-footer" onClick={e => e.stopPropagation()}>
-                  <button className="btn-edit coin-card-btn" onClick={(e) => handleOpenEditModal(user, e)}>
-                    ✏️ Edit
-                  </button>
-                  <button className="btn-delete coin-card-btn" onClick={(e) => handleOpenConfirmModal(user, e)}>
-                    🗑️ Hapus
-                  </button>
-                </div>
-              </div>
+  {/* Footer Action */}
+  <div className="coin-card-footer" onClick={e => e.stopPropagation()}>
+    <button className="btn-edit coin-card-btn" onClick={(e) => handleOpenEditModal(user, e)}>
+      ✏️ Edit
+    </button>
+    <button className="btn-delete coin-card-btn" onClick={(e) => handleOpenConfirmModal(user, e)}>
+      🗑️ Hapus
+    </button>
+  </div>
+</div>
             );
           })}
         </div>
       )}
 
       {/* ── MODAL DETAIL ── */}
-      {isDetailModalOpen && selectedUser && (() => {
-        const cfg = TIER_CONFIG[selectedUser.current_tier] || TIER_CONFIG.Bronze;
-        return (
-          <div className="modal-overlay" onClick={() => setIsDetailModalOpen(false)}>
-            <div className="modal-content coin-detail-modal" onClick={e => e.stopPropagation()}>
-              <div className="coin-detail-hero" style={{ background: cfg.bg }}>
-                <img
-                  src={getAvatarUrl(selectedUser.profile_image, selectedUser.user_name)}
-                  alt={selectedUser.user_name}
-                  className="coin-detail-avatar"
-                  onError={(e) => { e.target.src = DEFAULT_AVATAR(selectedUser.user_name); }}
-                />
-                <div>
-                  <h2 style={{ margin: 0, color: cfg.textColor }}>{selectedUser.user_name}</h2>
-                  <p style={{ margin: '4px 0 0', color: cfg.textColor, opacity: 0.7, fontSize: '0.9rem' }}>User ID #{selectedUser.user_id}</p>
-                </div>
-              </div>
-
-              <div className="coin-detail-stats">
-                <div className="coin-detail-stat-item" style={{ background: cfg.bg, borderColor: `${cfg.border}44` }}>
-                  <span className="coin-stat-icon">🪙</span>
-                  <span className="coin-stat-value" style={{ color: cfg.textColor }}>{selectedUser.points.toLocaleString('id-ID')}</span>
-                  <span className="coin-stat-label">Total Poin</span>
-                </div>
-                <div className="coin-detail-stat-item" style={{ background: cfg.bg, borderColor: `${cfg.border}44` }}>
-                  <span className="coin-stat-icon">{cfg.emoji}</span>
-                  <span className="coin-stat-value" style={{ color: cfg.textColor }}>{selectedUser.current_tier}</span>
-                  <span className="coin-stat-label">Tier Saat Ini</span>
-                </div>
-                <div className="coin-detail-stat-item" style={{ background: '#f9f9f9', borderColor: '#eee' }}>
-                  <span className="coin-stat-icon">📅</span>
-                  <span className="coin-stat-value" style={{ color: '#444', fontSize: '0.85rem' }}>
-                    {new Date(selectedUser.updated_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
-                  </span>
-                  <span className="coin-stat-label">Terakhir Update</span>
-                </div>
-              </div>
-
-              <div className="coin-detail-range" style={{ borderLeft: `3px solid ${cfg.color}` }}>
-                <small style={{ color: '#888' }}>Rentang poin tier <strong style={{ color: cfg.textColor }}>{selectedUser.current_tier}</strong>:</small>
-                <span style={{ color: cfg.textColor, fontWeight: 600, marginLeft: 8 }}>{cfg.range}</span>
-              </div>
-
-              <div className="modal-footer">
-                <button className="btn-secondary" onClick={() => setIsDetailModalOpen(false)}>Tutup</button>
-                <button className="btn-edit" onClick={(e) => { setIsDetailModalOpen(false); handleOpenEditModal(selectedUser, e); }}>✏️ Edit Poin & Tier</button>
-                <button className="btn-danger" onClick={(e) => { setIsDetailModalOpen(false); handleOpenConfirmModal(selectedUser, e); }}>🗑️ Hapus</button>
-              </div>
-            </div>
+{isDetailModalOpen && selectedUser && (() => {
+  const cfg = TIER_CONFIG[selectedUser.current_tier] || TIER_CONFIG.Bronze;
+  return (
+    <div className="modal-overlay" onClick={() => setIsDetailModalOpen(false)}>
+      <div className="modal-content coin-detail-modal" onClick={e => e.stopPropagation()}>
+        
+        <div className="coin-detail-hero" style={{ background: cfg.bg }}>
+          <img
+            src={getAvatarUrl(selectedUser.profile_image, selectedUser.user_name)}
+            alt={selectedUser.user_name}
+            className="coin-detail-avatar"
+            onError={(e) => { e.target.src = DEFAULT_AVATAR(selectedUser.user_name); }}
+          />
+          <div>
+            <h2 style={{ color: cfg.textColor }}>{selectedUser.user_name}</h2>
+            <p style={{ color: cfg.textColor, opacity: 0.8 }}>User ID #{selectedUser.user_id}</p>
           </div>
-        );
-      })()}
+        </div>
+
+        <div className="coin-detail-stats">
+          <div className="coin-detail-stat-item">
+            <span className="coin-stat-icon">🪙</span>
+            <span className="coin-stat-value">{selectedUser.points.toLocaleString('id-ID')}</span>
+            <span className="coin-stat-label">Total Poin</span>
+          </div>
+          <div className="coin-detail-stat-item">
+            <span className="coin-stat-icon">{cfg.emoji}</span>
+            <span className="coin-stat-value">{selectedUser.current_tier}</span>
+            <span className="coin-stat-label">Tier Saat Ini</span>
+          </div>
+          <div className="coin-detail-stat-item">
+            <span className="coin-stat-icon">📅</span>
+            <span className="coin-stat-value" style={{ fontSize: '0.9rem' }}>
+              {new Date(selectedUser.updated_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </span>
+            <span className="coin-stat-label">Update</span>
+          </div>
+        </div>
+
+        <div className="coin-detail-range">
+          <span>Rentang poin tier </span>
+          <span style={{ color: cfg.textColor, fontWeight: 700 }}>{selectedUser.current_tier}</span>
+          <span>: {cfg.range}</span>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={() => setIsDetailModalOpen(false)}>Tutup</button>
+          <button className="btn-edit" onClick={(e) => { setIsDetailModalOpen(false); handleOpenEditModal(selectedUser, e); }}>✏️ Edit Poin</button>
+          <button className="btn-danger" onClick={(e) => { setIsDetailModalOpen(false); handleOpenConfirmModal(selectedUser, e); }}>🗑️ Hapus</button>
+        </div>
+        
+      </div>
+    </div>
+  );
+})()}
 
       {/* ── MODAL EDIT ── */}
       {isEditModalOpen && selectedUser && (

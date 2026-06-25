@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axiosInstance';
 import jsPDF from 'jspdf';
@@ -373,6 +373,33 @@ const sharedStyles = `
   }
   .bk-excel-btn:hover:not(:disabled) { background: #155534; transform: translateY(-1px); }
   .bk-excel-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  /* ── Notifikasi Toast Modern (INLINE) ── */
+  @keyframes slideInRight {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  .modern-toast-inline {
+    background: #fff;
+    border-left: 4px solid #14a058;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    padding: 6px 12px;
+    display: flex; align-items: center; gap: 10px;
+    animation: slideInRight 0.4s cubic-bezier(0.175,0.885,0.32,1.275) forwards;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    white-space: nowrap;
+  }
+  .toast-icon-wrapper {
+    background: #e8fbf0; width: 28px; height: 28px;
+    border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: 0.9rem; flex-shrink: 0;
+  }
+  .toast-close-btn {
+    background: transparent; border: none; font-size: 1.2rem;
+    color: #aaa; cursor: pointer; padding: 0 0 0 5px; line-height: 1; transition: color 0.2s;
+  }
+  .toast-close-btn:hover { color: #333; }
 `;
 
 const Lasik = () => {
@@ -389,23 +416,112 @@ const Lasik = () => {
     const [isExporting, setIsExporting] = useState(false);
     const [isPdfLoading, setIsPdfLoading] = useState(false);
 
+    const [toastNotif, setToastNotif] = useState(null);
+    const notifAudioRef = useRef(null);
+    const notifiedIdsRef = useRef(new Set());
+    const isPendingRef = useRef(false);
+
+    const getStatusLabel = (status) => {
+        const s = status ? status.toLowerCase() : '';
+        if (['confirmed', 'dikonfirmasi'].includes(s)) return 'Dikonfirmasi';
+        if (s === 'selesai') return 'Selesai';
+        if (['pending', 'menunggu'].includes(s)) return 'Menunggu';
+        if (['batal', 'cancelled', 'ditolak'].includes(s)) return 'Dibatalkan';
+        return status || 'Pending';
+    };
+
+    // ── Logic Utama Audio Looping Manual ──
+    useEffect(() => {
+        const pendingCount = bookings.filter(b => getStatusLabel(b.status) === 'Menunggu').length;
+        isPendingRef.current = pendingCount > 0;
+        
+        if (pendingCount > 0) {
+            if (notifAudioRef.current && notifAudioRef.current.paused) {
+                notifAudioRef.current.play().catch(err => {
+                    console.warn('Browser memblokir autoplay. Silakan klik layar 1x agar suara otomatis keluar.', err);
+                });
+            }
+        } else {
+            if (notifAudioRef.current && !notifAudioRef.current.paused) {
+                notifAudioRef.current.pause();
+                notifAudioRef.current.currentTime = 0;
+                setToastNotif(null); 
+            }
+        }
+    }, [bookings]);
+
+    // ── Inisialisasi Audio dengan Event Listener Manual ──
+    useEffect(() => {
+        const audio = new Audio('/src/assets/voice/lasik_masuk.mp3');
+        audio.volume = 1.0;
+        
+        // Logika paksa loop: Kalau audio selesai dan status masih ada yang pending, putar lagi
+        const handleEnded = () => {
+            if (isPendingRef.current) {
+                audio.currentTime = 0;
+                audio.play().catch(err => console.warn("Autoplay ditolak:", err));
+            }
+        };
+        
+        audio.addEventListener('ended', handleEnded);
+        notifAudioRef.current = audio;
+
+        return () => {
+            audio.removeEventListener('ended', handleEnded);
+            audio.pause();
+            audio.src = '';
+        };
+    }, []);
+
     const showToast = (msg) => {
         setToast(msg);
         setTimeout(() => setToast(''), 3000);
     };
 
-    const fetchBookings = async () => {
+    // ── FETCH DATA POLLING ──────────────────────────────────────────────────
+    const fetchBookings = useCallback(async (isSilent = false) => {
+        if (!isSilent) setLoading(true);
         try {
             const response = await api.get('/admin/layanan/lasik');
-            if (response.data.success) setBookings(response.data.data);
+            if (response.data.success) {
+                const newData = response.data.data;
+                setBookings(prevData => {
+                    const newPendingIds = newData
+                        .filter(i => getStatusLabel(i.status) === 'Menunggu')
+                        .map(i => i.id);
+
+                    const brandNewIds = newPendingIds.filter(
+                        id => !notifiedIdsRef.current.has(id)
+                    );
+
+                    // Memunculkan toast box hanya jika ada ID baru yang masuk
+                    if (brandNewIds.length > 0) {
+                        brandNewIds.forEach(id => notifiedIdsRef.current.add(id));
+                        setToastNotif({
+                            title: 'Booking Baru!',
+                            desc: `${brandNewIds.length} pasien mendaftar LASIK.`
+                        });
+                    }
+
+                    if (newPendingIds.length === 0) {
+                        notifiedIdsRef.current.clear();
+                    }
+
+                    return newData;
+                });
+            }
         } catch (error) {
             console.error("Gagal mengambil data lasik:", error);
         } finally {
-            setLoading(false);
+            if (!isSilent) setLoading(false);
         }
-    };
+    }, []);
 
-    useEffect(() => { fetchBookings(); }, []);
+    useEffect(() => { 
+        fetchBookings(false); 
+        const interval = setInterval(() => fetchBookings(true), 5000);
+        return () => clearInterval(interval);
+    }, [fetchBookings]);
 
     // LOGIKA AUTO OPEN MODAL DARI DASHBOARD
     useEffect(() => {
@@ -424,11 +540,18 @@ const Lasik = () => {
     const handleStatusChange = async (id, newStatus) => {
         try {
             await api.put(`/admin/layanan/lasik/${id}/status`, { status: newStatus });
+            
             setBookings(prev => prev.map(item => item.id === id ? { ...item, status: newStatus } : item));
+            
             if (selectedDetail && selectedDetail.id === id) {
                 setSelectedDetail(prev => ({ ...prev, status: newStatus }));
             }
             showToast(`Status diubah → ${newStatus}`);
+
+            if (getStatusLabel(newStatus) !== 'Menunggu') {
+                notifiedIdsRef.current.delete(id);
+            }
+
         } catch { 
             showToast("Gagal mengubah status."); 
         }
@@ -438,7 +561,9 @@ const Lasik = () => {
         if (!confirmDelete) return;
         try {
             await api.delete(`/admin/layanan/lasik/${confirmDelete}`);
+            
             setBookings(prev => prev.filter(item => item.id !== confirmDelete));
+            
             if (selectedDetail && selectedDetail.id === confirmDelete) {
                 setShowDetailModal(false); setSelectedDetail(null);
             }
@@ -508,15 +633,6 @@ const Lasik = () => {
         return 'secondary';
     };
 
-    const getStatusLabel = (status) => {
-        const s = status ? status.toLowerCase() : '';
-        if (['confirmed', 'dikonfirmasi'].includes(s)) return 'Dikonfirmasi';
-        if (s === 'selesai') return 'Selesai';
-        if (['pending', 'menunggu'].includes(s)) return 'Menunggu';
-        if (['batal', 'cancelled', 'ditolak'].includes(s)) return 'Dibatalkan';
-        return status || 'Pending';
-    };
-
     const openDetail = (item) => { setSelectedDetail(item); setShowDetailModal(true); };
     const closeDetail = () => { setShowDetailModal(false); setSelectedDetail(null); };
 
@@ -531,10 +647,6 @@ const Lasik = () => {
     const fallbackAvatar = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><rect width='80' height='80' rx='40' fill='%23e0e0e0'/><circle cx='40' cy='30' r='15' fill='%23bdbdbd'/><ellipse cx='40' cy='65' rx='22' ry='15' fill='%23bdbdbd'/></svg>`;
     const fallbackBuilding = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><rect width='80' height='80' fill='%23e3f2fd'/><rect x='15' y='25' width='50' height='40' fill='%2390caf9'/><rect x='30' y='45' width='20' height='20' fill='%231565c0'/><rect x='10' y='20' width='60' height='8' fill='%231565c0'/></svg>`;
 
-    // ====================================================================
-    // FUNGSI DOWNLOAD PDF — html2canvas → jsPDF
-    // Menggunakan HTML yang IDENTIK dengan handlePrint agar tampilan PDF = Print
-    // ====================================================================
     const handleDownloadPDF = async () => {
         if (!selectedDetail) return;
         setIsPdfLoading(true);
@@ -550,7 +662,6 @@ const Lasik = () => {
 
         const statusLabel = selectedDetail.status ? selectedDetail.status.toUpperCase() : 'PENDING';
 
-        // Buat container sementara, render HTML persis seperti print
         const container = document.createElement('div');
         container.style.cssText = `
             position: fixed;
@@ -566,21 +677,8 @@ const Lasik = () => {
         container.innerHTML = `
             <style>
                 * { box-sizing: border-box; margin: 0; padding: 0; }
-                .page-container {
-                    padding: 56.69px;
-                    position: relative;
-                    min-height: 1122px;
-                    background: #fff;
-                    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-                    color: #3c3c3c;
-                }
-                .top-accent {
-                    background-color: #14a058 !important;
-                    height: 15px;
-                    width: 100%;
-                    position: absolute;
-                    top: 0; left: 0;
-                }
+                .page-container { padding: 56.69px; position: relative; min-height: 1122px; background: #fff; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #3c3c3c; }
+                .top-accent { background-color: #14a058 !important; height: 15px; width: 100%; position: absolute; top: 0; left: 0; }
                 .header { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; }
                 .logo-img { height: 75px; object-fit: contain; display: block; }
                 .logo-fallback { font-size: 30px; font-weight: 900; color: #14a058; line-height: 1; }
@@ -589,109 +687,35 @@ const Lasik = () => {
                 .invoice-meta { font-size: 13px; color: #666; text-align: right; margin-top: 8px; line-height: 1.6; }
                 .divider { border: none; border-top: 1px solid #e6e6e6; margin: 22px 0 26px; }
                 .info-section { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 26px; }
-                .info-block {
-                    width: 48%;
-                    background: #f8fcf9;
-                    border: 1px solid #d8eee2;
-                    border-radius: 8px;
-                    padding: 14px 16px;
-                }
-                .info-label {
-                    font-size: 9px; color: #14a058; font-weight: 800;
-                    margin-bottom: 8px; text-transform: uppercase;
-                    letter-spacing: 0.08em;
-                    padding-bottom: 6px;
-                    border-bottom: 1px solid #d4edd9;
-                }
+                .info-block { width: 48%; background: #f8fcf9; border: 1px solid #d8eee2; border-radius: 8px; padding: 14px 16px; }
+                .info-label { font-size: 9px; color: #14a058; font-weight: 800; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; padding-bottom: 6px; border-bottom: 1px solid #d4edd9; }
                 .info-value-main { font-size: 16px; font-weight: 800; color: #181818; margin-bottom: 5px; }
                 .info-value-sub { font-size: 12.5px; color: #666; margin-bottom: 3px; line-height: 1.5; }
                 .info-value-sub.muted { color: #aaa; font-size: 11.5px; }
                 .info-value-bold { font-size: 13.5px; font-weight: 700; color: #282828; margin-top: 7px; margin-bottom: 3px; }
-                .section-label {
-                    font-size: 9px; font-weight: 800; color: #14a058;
-                    text-transform: uppercase; letter-spacing: 0.1em;
-                    margin-bottom: 6px;
-                    display: flex; align-items: center; gap: 6px;
-                }
-                .section-label::after {
-                    content: ''; flex: 1; height: 1.5px; background: #14a058; opacity: 0.4;
-                }
+                .section-label { font-size: 9px; font-weight: 800; color: #14a058; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+                .section-label::after { content: ''; flex: 1; height: 1.5px; background: #14a058; opacity: 0.4; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 26px; table-layout: fixed; }
                 col.col-desc   { width: 34%; }
                 col.col-dokter { width: 28%; }
                 col.col-jadwal { width: 24%; }
                 col.col-status { width: 14%; }
-                th {
-                    background: #f0faf5 !important;
-                    -webkit-print-color-adjust: exact;
-                    print-color-adjust: exact;
-                    color: #14a058;
-                    padding: 11px 13px;
-                    text-align: left;
-                    font-size: 11px;
-                    font-weight: 800;
-                    border-top: 1.5px solid #cceadb;
-                    border-bottom: 1.5px solid #cceadb;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                    overflow: hidden;
-                }
+                th { background: #f0faf5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #14a058; padding: 11px 13px; text-align: left; font-size: 11px; font-weight: 800; border-top: 1.5px solid #cceadb; border-bottom: 1.5px solid #cceadb; text-transform: uppercase; letter-spacing: 0.05em; overflow: hidden; }
                 th.col-status-h { text-align: center; }
-                td {
-                    padding: 13px 13px;
-                    font-size: 13px;
-                    border-bottom: 1px solid #eaf4ed;
-                    color: #404040;
-                    vertical-align: middle;
-                    line-height: 1.5;
-                    overflow: hidden;
-                }
+                td { padding: 13px 13px; font-size: 13px; border-bottom: 1px solid #eaf4ed; color: #404040; vertical-align: middle; line-height: 1.5; overflow: hidden; }
                 td.col-status-d { text-align: center; }
                 td strong { color: #1a1a1a; display: block; margin-bottom: 3px; }
                 td span.sub { font-size: 11.5px; color: #888; }
-                .status-badge {
-                    display: inline-block;
-                    padding: 4px 12px;
-                    border-radius: 20px;
-                    font-size: 10.5px;
-                    font-weight: 800;
-                    text-transform: uppercase;
-                    letter-spacing: 0.04em;
-                    white-space: nowrap;
-                }
+                .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
                 .status-badge.success { background: #d4f5e2 !important; color: #0b7a3e !important; }
                 .status-badge.warning { background: #fff3cd !important; color: #856404 !important; }
                 .status-badge.danger  { background: #fde8e8 !important; color: #c0392b !important; }
                 .status-badge.secondary { background: #eee !important; color: #555 !important; }
-                .notes-title {
-                    font-size: 9px; font-weight: 800; color: #14a058;
-                    text-transform: uppercase; letter-spacing: 0.1em;
-                    margin-bottom: 8px;
-                }
-                .notes-box {
-                    background: #f5fcf8 !important;
-                    border: 1px solid #d0eadb;
-                    border-left: 5px solid #14a058 !important;
-                    border-radius: 6px;
-                    padding: 12px 16px;
-                    margin-bottom: 36px;
-                }
-                .notes-box p {
-                    margin: 0 0 5px;
-                    font-size: 12px;
-                    color: #555;
-                    line-height: 1.6;
-                }
+                .notes-title { font-size: 9px; font-weight: 800; color: #14a058; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+                .notes-box { background: #f5fcf8 !important; border: 1px solid #d0eadb; border-left: 5px solid #14a058 !important; border-radius: 6px; padding: 12px 16px; margin-bottom: 36px; }
+                .notes-box p { margin: 0 0 5px; font-size: 12px; color: #555; line-height: 1.6; }
                 .notes-box p:last-child { margin-bottom: 0; }
-                .footer {
-                    position: absolute;
-                    bottom: 40px;
-                    left: 56.69px;
-                    right: 56.69px;
-                    text-align: center;
-                    border-top: 2px solid #14a058;
-                    padding-top: 10px;
-                }
+                .footer { position: absolute; bottom: 40px; left: 56.69px; right: 56.69px; text-align: center; border-top: 2px solid #14a058; padding-top: 10px; }
                 .footer p.main { margin: 0 0 5px 0; font-size: 12.5px; color: #828282; }
                 .footer p.sub  { margin: 0; font-size: 11.5px; color: #aaa; }
             </style>
@@ -786,19 +810,18 @@ const Lasik = () => {
         document.body.appendChild(container);
 
         try {
-            // Tunggu gambar logo selesai load (jika ada)
             const logoImg = container.querySelector('.logo-img');
             if (logoImg) {
                 await new Promise((resolve) => {
                     if (logoImg.complete) { resolve(); return; }
                     logoImg.onload = resolve;
                     logoImg.onerror = resolve;
-                    setTimeout(resolve, 2000); // fallback timeout
+                    setTimeout(resolve, 2000); 
                 });
             }
 
             const canvas = await html2canvas(container.querySelector('.page-container'), {
-                scale: 2,           // 2x untuk kualitas tajam
+                scale: 2,           
                 useCORS: true,
                 allowTaint: true,
                 backgroundColor: '#ffffff',
@@ -807,25 +830,19 @@ const Lasik = () => {
             });
 
             const imgData = canvas.toDataURL('image/jpeg', 0.97);
-
-            // A4: 210mm x 297mm → dalam pt: 595.28 x 841.89
             const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-            const pageWidth  = doc.internal.pageSize.getWidth();   // 595.28 pt
-            const pageHeight = doc.internal.pageSize.getHeight();  // 841.89 pt
-
+            const pageWidth  = doc.internal.pageSize.getWidth();   
+            const pageHeight = doc.internal.pageSize.getHeight();  
             const canvasWidth  = canvas.width;
             const canvasHeight = canvas.height;
-
-            // Hitung tinggi gambar proporsional sesuai lebar halaman PDF
             const imgHeightInPt = (canvasHeight / canvasWidth) * pageWidth;
 
-            // Jika konten > 1 halaman, potong per halaman
             let yOffset = 0;
             while (yOffset < imgHeightInPt) {
                 if (yOffset > 0) doc.addPage();
                 doc.addImage(
                     imgData, 'JPEG',
-                    0, -yOffset,               // geser canvas ke atas sesuai halaman
+                    0, -yOffset,               
                     pageWidth, imgHeightInPt,
                     undefined, 'FAST'
                 );
@@ -842,9 +859,6 @@ const Lasik = () => {
         }
     };
 
-    // ====================================================================
-    // FUNGSI PRINT WINDOW (Identik 100% dengan Layout PDF menggunakan IMG, NO EXTRA TEXT, ALIGNED)
-    // ====================================================================
     const handlePrint = () => {
         if (!selectedDetail) return;
         const tgl = new Date(selectedDetail.tgl_kedatangan).toLocaleDateString('id-ID', { 
@@ -858,151 +872,44 @@ const Lasik = () => {
                 <title>Cetak Booking - ${selectedDetail.no_invoice}</title>
                 <style>
                     @page { margin: 0; size: A4 portrait; }
-                    body { 
-                        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
-                        color: #3c3c3c; 
-                        margin: 0; 
-                        padding: 0; 
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                    }
-                    .page-container { 
-                        padding: 15mm; 
-                        position: relative; 
-                        min-height: 260mm; 
-                        box-sizing: border-box; 
-                    }
-                    
-                    /* Aksen Garis Hijau Atas */
-                    .top-accent {
-                        background-color: #14a058 !important;
-                        height: 4mm;
-                        width: 100%;
-                        position: absolute;
-                        top: 0; left: 0;
-                    }
-                    
-                    /* Header dengan Gambar Logo JEC Diperbesar dan Sejajar */
+                    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #3c3c3c; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    .page-container { padding: 15mm; position: relative; min-height: 260mm; box-sizing: border-box; }
+                    .top-accent { background-color: #14a058 !important; height: 4mm; width: 100%; position: absolute; top: 0; left: 0; }
                     .header { display: flex; justify-content: space-between; align-items: center; margin-top: 5mm; }
                     .logo-img { height: 75px; object-fit: contain; display: block; }
-                    
                     .invoice-title { font-size: 32px; font-weight: bold; color: #282828; margin: 0; text-align: right; line-height: 1;}
                     .invoice-meta { font-size: 13px; color: #666; text-align: right; margin-top: 8px; line-height: 1.5; }
-                    
                     .divider { border-top: 1px solid #e6e6e6; margin-top: 8mm; margin-bottom: 10mm; }
-                    
-                    /* 2 Kolom Info */
                     .info-section { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10mm; }
-                    .info-block {
-                        width: 48%;
-                        background: #f8fcf9;
-                        border: 1px solid #d8eee2;
-                        border-radius: 8px;
-                        padding: 12px 14px;
-                        box-sizing: border-box;
-                    }
-                    .info-label {
-                        font-size: 9px; color: #14a058; font-weight: 800;
-                        margin-bottom: 6px; text-transform: uppercase;
-                        letter-spacing: 0.08em;
-                        padding-bottom: 5px;
-                        border-bottom: 1px solid #d4edd9;
-                    }
+                    .info-block { width: 48%; background: #f8fcf9; border: 1px solid #d8eee2; border-radius: 8px; padding: 12px 14px; box-sizing: border-box; }
+                    .info-label { font-size: 9px; color: #14a058; font-weight: 800; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.08em; padding-bottom: 5px; border-bottom: 1px solid #d4edd9; }
                     .info-value-main { font-size: 15px; font-weight: 800; color: #181818; margin-bottom: 4px; }
                     .info-value-sub { font-size: 12px; color: #666; margin-bottom: 2px; line-height: 1.5; }
                     .info-value-sub.muted { color: #aaa; font-size: 11px; }
                     .info-value-bold { font-size: 13px; font-weight: 700; color: #282828; margin-top: 6px; margin-bottom: 2px; }
-                    
-                    /* Section Label */
-                    .section-label {
-                        font-size: 9px; font-weight: 800; color: #14a058;
-                        text-transform: uppercase; letter-spacing: 0.1em;
-                        margin-bottom: 5px;
-                        display: flex; align-items: center; gap: 6px;
-                    }
-                    .section-label::after {
-                        content: ''; flex: 1; height: 1.5px; background: #14a058; opacity: 0.4;
-                    }
-
-                    /* Tabel Clean */
+                    .section-label { font-size: 9px; font-weight: 800; color: #14a058; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+                    .section-label::after { content: ''; flex: 1; height: 1.5px; background: #14a058; opacity: 0.4; }
                     table { width: 100%; border-collapse: collapse; margin-bottom: 8mm; table-layout: fixed; }
                     col.col-desc   { width: 34%; }
                     col.col-dokter { width: 28%; }
                     col.col-jadwal { width: 24%; }
                     col.col-status { width: 14%; }
-                    th { 
-                        background: #f0faf5; 
-                        color: #14a058; 
-                        padding: 10px 12px; 
-                        text-align: left; 
-                        font-size: 11px; 
-                        font-weight: 800;
-                        border-top: 1.5px solid #cceadb; 
-                        border-bottom: 1.5px solid #cceadb; 
-                        text-transform: uppercase;
-                        letter-spacing: 0.05em;
-                        overflow: hidden;
-                    }
+                    th { background: #f0faf5; color: #14a058; padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 800; border-top: 1.5px solid #cceadb; border-bottom: 1.5px solid #cceadb; text-transform: uppercase; letter-spacing: 0.05em; overflow: hidden; }
                     th.col-status-h { text-align: center; }
-                    td { 
-                        padding: 12px 12px; 
-                        font-size: 12.5px; 
-                        border-bottom: 1px solid #eaf4ed; 
-                        color: #404040; 
-                        vertical-align: middle;
-                        line-height: 1.5;
-                        overflow: hidden;
-                    }
+                    td { padding: 12px 12px; font-size: 12.5px; border-bottom: 1px solid #eaf4ed; color: #404040; vertical-align: middle; line-height: 1.5; overflow: hidden; }
                     td.col-status-d { text-align: center; }
                     td strong { color: #1a1a1a; display: block; margin-bottom: 2px; }
                     td span.sub { font-size: 11px; color: #888; }
-                    td .status-badge {
-                        display: inline-block;
-                        padding: 4px 10px;
-                        border-radius: 20px;
-                        font-size: 10px;
-                        font-weight: 800;
-                        text-transform: uppercase;
-                        letter-spacing: 0.04em;
-                        white-space: nowrap;
-                    }
+                    td .status-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
                     td .status-badge.success { background: #d4f5e2; color: #0b7a3e; }
                     td .status-badge.warning { background: #fff3cd; color: #856404; }
                     td .status-badge.danger  { background: #fde8e8; color: #c0392b; }
                     td .status-badge.secondary { background: #eee; color: #555; }
-
-                    /* Catatan */
-                    .notes-box {
-                        background: #f5fcf8;
-                        border: 1px solid #d0eadb;
-                        border-left: 4px solid #14a058;
-                        border-radius: 6px;
-                        padding: 10px 14px;
-                        margin-bottom: 12mm;
-                    }
-                    .notes-box p {
-                        margin: 0 0 4px;
-                        font-size: 11.5px;
-                        color: #555;
-                        line-height: 1.6;
-                    }
+                    .notes-box { background: #f5fcf8; border: 1px solid #d0eadb; border-left: 4px solid #14a058; border-radius: 6px; padding: 10px 14px; margin-bottom: 12mm; }
+                    .notes-box p { margin: 0 0 4px; font-size: 11.5px; color: #555; line-height: 1.6; }
                     .notes-box p:last-child { margin-bottom: 0; }
-                    .notes-title {
-                        font-size: 9px; font-weight: 800; color: #14a058;
-                        text-transform: uppercase; letter-spacing: 0.1em;
-                        margin-bottom: 7px;
-                    }
-                    
-                    /* Footer Fix di Bawah */
-                    .footer { 
-                        position: absolute; 
-                        bottom: 15mm; 
-                        left: 15mm; 
-                        right: 15mm; 
-                        text-align: center; 
-                        border-top: 2px solid #14a058; 
-                        padding-top: 8px; 
-                    }
+                    .notes-title { font-size: 9px; font-weight: 800; color: #14a058; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 7px; }
+                    .footer { position: absolute; bottom: 15mm; left: 15mm; right: 15mm; text-align: center; border-top: 2px solid #14a058; padding-top: 8px; }
                     .footer p.main { margin: 0 0 4px 0; font-size: 12px; color: #828282; }
                     .footer p.sub { margin: 0; font-size: 11px; color: #aaaaaa; }
                 </style>
@@ -1118,12 +1025,47 @@ const Lasik = () => {
         return matchStatus && matchSearch;
     });
 
+    const pendingCount = bookings.filter(b => getStatusLabel(b.status) === 'Menunggu').length;
+
     return (
         <div className="crud-page crud-container">
             <style>{sharedStyles}</style>
 
-            <div className="crud-page-header">
-                <h1>Booking Layanan LASIK</h1>
+            <div className="crud-page-header" style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+                <h1 style={{ margin: 0 }}>Booking Layanan LASIK</h1>
+                
+                {/* ── BUNGKUS KHUSUS UNTUK MENDEKATKAN BADGE KUNING & NOTIFIKASI TOAST ── */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    
+                    {/* Badge Kuning */}
+                    {pendingCount > 0 && (
+                        <span style={{
+                            backgroundColor: '#ffc107', color: '#856404',
+                            border: '1px solid #ffc107', borderRadius: '20px',
+                            padding: '4px 12px', fontSize: '0.8rem', fontWeight: '700',
+                            display: 'flex', alignItems: 'center', gap: '5px',
+                            animation: 'pulse 1.5s ease-in-out infinite',
+                            boxShadow: '0 0 0 0 rgba(255,193,7,0.4)',
+                        }}>
+                            🔔 {pendingCount} Menunggu Konfirmasi
+                        </span>
+                    )}
+                    
+                    {/* Notifikasi Toast Inline (Posisi kini terkunci rapat dengan Badge Kuning di dalam wrapper flex ini) */}
+                    {toastNotif && (
+                        <div className="modern-toast-inline">
+                            <div className="toast-icon-wrapper">👁️</div>
+                            <div>
+                                <h4 style={{ margin: 0, fontSize: '0.8rem', color: '#14a058' }}>{toastNotif.title}</h4>
+                                <p style={{ margin: 0, fontSize: '0.7rem', color: '#666' }}>{toastNotif.desc}</p>
+                            </div>
+                            <button className="toast-close-btn" onClick={() => setToastNotif(null)}>&times;</button>
+                        </div>
+                    )}
+
+                </div>
+                {/* ── SELESAI BUNGKUS KHUSUS ── */}
+
             </div>
 
             {/* Filter, Search & Export Excel */}
@@ -1188,6 +1130,14 @@ const Lasik = () => {
                                         alt={item.user_name}
                                         onError={e => { e.target.src = fallbackAvatar; }}
                                     />
+                                    {getStatusLabel(item.status) === 'Menunggu' && (
+                                        <span style={{
+                                            position: 'absolute', top: 0, right: 0, width: '12px', height: '12px',
+                                            backgroundColor: '#ffc107', borderRadius: '50%',
+                                            border: '2px solid #fff',
+                                            animation: 'blink 1s infinite'
+                                        }} />
+                                    )}
                                 </div>
                                 <p className="bk-card-user-name">{item.user_name || 'Guest'}</p>
                                 <p className="bk-card-pasien">Pasien: {item.nama_pasien}</p>

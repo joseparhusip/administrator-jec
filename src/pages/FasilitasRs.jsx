@@ -332,17 +332,21 @@ function FasilitasRs() {
         <div className="frs-main-container">
             {/* Header */}
             <div className="crud-page-header">
-                <h1>Galeri Fasilitas Rumah Sakit</h1>
-                <div className="crud-header-controls">
-                    <select
-                        className="filter-dropdown"
-                        value={filterType}
-                        onChange={(e) => setFilterType(e.target.value)}
-                    >
-                        {uniqueTypes.map((type, i) => (
-                            <option key={i} value={type}>{type}</option>
-                        ))}
-                    </select>
+                <h1>Manajemen Fasilitas Rumah Sakit dan Klinik</h1>
+                
+                {/* ── SEJAJAR SATU BARIS DROPDOWN MODERN ── */}
+                <div className="crud-header-controls" style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+                    <div className="custom-dropdown-wrapper" style={{ minWidth: '200px' }}>
+                        <select
+                            className="modern-filter-dropdown"
+                            value={filterType}
+                            onChange={(e) => setFilterType(e.target.value)}
+                        >
+                            {uniqueTypes.map((type, i) => (
+                                <option key={i} value={type}>{type}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </div>
 

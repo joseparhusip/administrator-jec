@@ -36,6 +36,13 @@
   --topbar-height: 60px;
 }
 
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+
 * {
   margin: 0;
   padding: 0;
@@ -393,10 +400,9 @@ body {
 
 
 .admin-layout {
-  display: flex;
-  position: relative;
-  background-color: var(--bg-light);
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .admin-content-wrapper {
@@ -406,7 +412,7 @@ body {
   width: calc(100% - var(--sidebar-width));
   min-height: 100vh;
   transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out;
-  overflow-x: hidden;
+  overflow-x: clip; /* ← ubah dari hidden ke clip */
 }
 
 .admin-layout.sidebar-closed .admin-content-wrapper {
@@ -417,11 +423,11 @@ body {
 .admin-content {
   margin-left: 0;
   width: 100%;
-  padding: 2.5rem;
+  padding: 2.5rem 2.5rem 1rem 2.5rem;
   flex: 1;
   box-sizing: border-box;
+  min-height: 100vh; /* ← tambahkan ini */
 }
-
 .sidebar-open-btn {
   position: fixed;
   top: 1rem;
@@ -1179,7 +1185,6 @@ body {
 .crud-page {
   animation: pageFadeIn 0.5s ease-out forwards;
   width: 100%;
-  min-height: calc(100vh - 5rem);
   display: flex;
   flex-direction: column;
 }
@@ -1588,37 +1593,38 @@ body {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
+  width: 100vw;       /* Paksa lebar 100% viewport */
+  height: 100vh;      /* Paksa tinggi 100% viewport */
   background-color: rgba(0, 0, 0, 0.55);
   z-index: 9999;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 1rem;
-  overflow-y: auto;
-  animation: modalFadeIn 0.3s ease;
-  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;   /* Tetap bisa di-scroll jika konten modal panjang */
 }
 
+/* 2. Hapus pembatasan tinggi pada modal agar mengikuti panjang konten */
 .modal-content {
   background-color: var(--white);
-  color: var(--gray-900);
   padding: 0;
   border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
   width: 100%;
   max-width: 550px;
-  z-index: 1001;
-  border: 1px solid var(--gray-300);
+  max-height: none;        /* Pastikan tidak dibatasi 85vh/lainnya */
   display: flex;
   flex-direction: column;
-  margin: auto;
-  max-height: 90vh;
-  overflow-y: auto;
+  margin: auto;            /* Tetap di tengah secara horizontal */
+  margin-top: 2rem;        /* Memberi jarak dari atas layar */
+  margin-bottom: 2rem;     /* Memberi jarak dari bawah layar */
   position: relative;
-  -webkit-overflow-scrolling: touch;
 }
+
+  /* 3. Modal body: tidak perlu overflow scroll lagi */
+  .modal-body {
+    padding: 1.25rem;
+    overflow-y: visible;       /* ← pastikan tidak tersembunyi */
+  }
 
 .modal-content.large {
   max-width: 800px;
@@ -3070,7 +3076,7 @@ body {
   background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
   color: rgba(255, 255, 255, 0.9);
   padding: 0.9rem 2rem;
-  margin-top: auto;
+  margin-top: 0;
   border-top: 3px solid var(--primary-mid);
   box-shadow: 0 -4px 20px rgba(46, 125, 50, 0.15);
 }
@@ -3413,7 +3419,7 @@ body {
   .modal-content {
     max-width: 100%;
     border-radius: 16px 16px 0 0;
-    max-height: 92vh;
+    max-height: none;  /* ← ubah dari 92vh */
     margin: 0;
   }
 
@@ -3592,7 +3598,7 @@ body {
 
   .modal-content {
     border-radius: 12px;
-    max-height: 95vh;
+    max-height: none;  /* ← ubah dari 95vh */
   }
 }
 
@@ -4496,204 +4502,272 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   COIN PAGE — User Point Cards
+   COIN PAGE — Redesain Card Elegan
    ══════════════════════════════════════════════════════════════════ */
 
-/* ── Card Grid (reuse rs-card-grid) ── */
-/* rs-card-grid already defined; coin cards extend it */
-
 .coin-user-card {
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: var(--shadow-sm);
-  border: 1.5px solid var(--gray-200);
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   overflow: hidden;
   cursor: pointer;
-  transition: var(--transition), transform 0.2s ease;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0 0 12px 0;
   position: relative;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  z-index: 1;
 }
 
 .coin-user-card:hover {
-  transform: translateY(-5px);
-  box-shadow: var(--shadow-lg);
-  border-color: var(--tier-border, #ccc);
+  transform: translateY(-8px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.1);
+  border-color: var(--tier-border, #e2e8f0);
 }
 
-/* Tier badge at the very top */
+/* Banner Tier Header */
 .coin-card-tier-badge {
   width: 100%;
+  height: 86px;
+  background: var(--tier-bg);
+  color: var(--tier-color);
   text-align: center;
-  font-size: 0.78rem;
+  font-size: 0.85rem;
   font-weight: 700;
-  letter-spacing: 0.5px;
-  padding: 7px 12px;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
+  letter-spacing: 1px;
+  padding-top: 16px;
+  text-transform: uppercase;
+  border: none;
 }
 
-/* Avatar wrap */
+/* Avatar Numpuk di Antara Banner dan Body */
 .coin-card-avatar-wrap {
   position: relative;
-  margin: 18px 0 8px 0;
+  margin-top: -42px;
+  margin-bottom: 16px;
+  z-index: 2;
 }
 
 .coin-card-avatar {
-  width: 80px;
-  height: 80px;
+  width: 84px;
+  height: 84px;
   border-radius: 50%;
   object-fit: cover;
-  border: 3px solid var(--tier-border, #ccc);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+  border: 4px solid #ffffff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  background: #ffffff;
   display: block;
 }
 
-.coin-card-points-badge {
-  position: absolute;
-  bottom: -10px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--tier-color, #999);
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 20px;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+/* Body Text */
+.coin-card-body {
+  text-align: center;
+  padding: 0 20px;
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-/* Body */
-.coin-card-body {
-  margin-top: 18px;
-  text-align: center;
-  padding: 0 14px;
-  flex: 1;
+/* Poin Bergaya Lencana Premium */
+.coin-card-points-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1.5px solid var(--tier-border);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 6px 18px;
+  border-radius: 50px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 .coin-card-name {
-  font-size: 0.97rem;
+  font-size: 1.1rem;
   font-weight: 700;
-  color: var(--gray-800);
-  margin-bottom: 3px;
+  color: #1e293b;
+  margin: 0 0 4px 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
+  width: 100%;
 }
 
 .coin-card-id {
   font-size: 0.75rem;
-  color: var(--gray-500);
-  margin-bottom: 2px;
+  color: #64748b;
+  margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .coin-card-updated {
-  font-size: 0.72rem;
-  color: var(--gray-400);
+  font-size: 0.7rem;
+  color: #94a3b8;
 }
 
-/* Footer buttons */
+/* Footer Buttons yang Bersih */
 .coin-card-footer {
   display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 0 14px;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px 20px;
   width: 100%;
-  justify-content: center;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
 }
 
 .coin-card-btn {
   flex: 1;
-  padding: 6px 0;
+  padding: 8px 0;
   font-size: 0.8rem;
-  border-radius: 8px;
-  border: none;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
-  transition: var(--transition);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
 }
 
-/* ── Detail Modal ── */
+.btn-edit.coin-card-btn {
+  color: #3b82f6;
+  border: 1px solid #bfdbfe;
+}
+.btn-edit.coin-card-btn:hover {
+  background: #3b82f6;
+  color: #ffffff;
+  border-color: #3b82f6;
+}
+
+.btn-delete.coin-card-btn {
+  color: #ef4444;
+  border: 1px solid #fecaca;
+}
+.btn-delete.coin-card-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+/* ── MODAL DETAIL COIN ELEGAN ── */
 .coin-detail-modal {
-  max-width: 480px !important;
+  max-width: 420px !important;
   padding: 0 !important;
   overflow: hidden;
+  border-radius: 24px;
+  border: none;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
 }
 
 .coin-detail-hero {
   display: flex;
+  flex-direction: column; /* Mengubah arah layout ke bawah */
   align-items: center;
-  gap: 16px;
-  padding: 28px 24px 24px;
+  text-align: center;
+  padding: 36px 24px 24px;
+  position: relative;
 }
 
 .coin-detail-avatar {
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
+  width: 96px !important;
+  height: 96px !important;
+  border-radius: 50% !important;
   object-fit: cover;
-  border: 3px solid rgba(255,255,255,0.8);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  border: 4px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  margin-bottom: 16px;
+  background: #ffffff;
   flex-shrink: 0;
+}
+
+.coin-detail-hero h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0 0 6px;
+  letter-spacing: 0.3px;
+}
+
+.coin-detail-hero p {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0;
 }
 
 .coin-detail-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
-  padding: 20px 24px 20px;
+  padding: 24px;
+  background: #ffffff;
 }
 
 .coin-detail-stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   padding: 16px 8px;
-  border-radius: 12px;
-  border: 1px solid #eee;
-  gap: 5px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  background: #f8fafc;
+  transition: transform 0.2s;
+}
+
+.coin-detail-stat-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04);
 }
 
 .coin-stat-icon {
-  font-size: 1.4rem;
+  font-size: 1.6rem;
+  margin-bottom: 8px;
   line-height: 1;
 }
 
 .coin-stat-value {
-  font-size: 0.95rem;
-  font-weight: 700;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 4px;
   text-align: center;
 }
 
 .coin-stat-label {
-  font-size: 0.68rem;
-  color: var(--gray-500);
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   text-align: center;
 }
 
 .coin-detail-range {
-  margin: 0 24px 20px;
-  padding: 12px 16px;
-  background: var(--gray-50);
-  border-radius: 8px;
-  border-left: 3px solid #ccc;
-  font-size: 0.85rem;
+  margin: 0 24px 24px;
+  padding: 14px 18px;
+  background: #f1f5f9;
+  border-radius: 12px;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  border: 1px solid #e2e8f0;
+  color: #475569;
 }
 
 .coin-detail-modal .modal-footer {
-  border-top: 1px solid var(--gray-200);
+  border-top: 1px solid #f1f5f9;
   padding: 16px 24px;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: flex-end;
-  flex-wrap: wrap;
+  background: #ffffff;
 }
 
 /* ── crud-header-controls (for search + filter side by side) ── */
@@ -5453,9 +5527,10 @@ FASILITAS RS DETAIL PAGE STYLES
 ══════════════════════════════════════════════════════════════════ */
 
 .frs-main-container {
-    padding: 24px;
-    background: var(--bg-light);
-    min-height: 100vh;
+  padding: 24px;
+  background: var(--bg-light);
+  display: flex;
+  flex-direction: column;
 }
 
 .frs-services-section {
@@ -5665,15 +5740,14 @@ FASILITAS RS DETAIL PAGE STYLES
     margin-bottom: 0.75rem;
 }
 
-/* Pagination */
 .pagination-container {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 6px;
-    margin-top: 24px;
-    padding-bottom: 24px;
-    flex-wrap: wrap;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  padding-bottom: 0; /* hapus padding bawah sepenuhnya menjadi 0 */
+  flex-wrap: wrap;
 }
 
 .pagination-btn {
@@ -5748,4 +5822,112 @@ FASILITAS RS DETAIL PAGE STYLES
         grid-template-columns: repeat(2, 1fr);
         gap: 12px;
     }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   DASHBOARD NOTIFIKASI TOAST & BADGE STYLES
+   ══════════════════════════════════════════════════════════════════ */
+
+.dashboard-badge-pulse {
+  background-color: #ffc107;
+  color: #856404;
+  border: 1px solid #ffc107;
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  animation: pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4);
+}
+
+.dashboard-notif-inline {
+  background: #fff;
+  border-left: 4px solid #14a058;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: slideInRight 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  font-family: 'Inter', 'Plus Jakarta Sans', sans-serif;
+  white-space: nowrap;
+}
+
+.dashboard-toast-icon {
+  background: #e8fbf0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.dashboard-toast-close {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  color: #aaa;
+  cursor: pointer;
+  padding: 0 0 0 5px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.dashboard-toast-close:hover {
+  color: #333;
+}
+
+/* ══ CUSTOM MODERN DROPDOWN (GLOBAL) ══════════════════════════════════ */
+.custom-dropdown-wrapper {
+  position: relative;
+  display: inline-block;
+  min-width: 150px;
+}
+
+.custom-dropdown-wrapper::after {
+  content: '▼';
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: #64748B;
+  pointer-events: none;
+  transition: transform 0.2s ease;
+}
+
+.modern-filter-dropdown {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  padding: 10px 38px 10px 16px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #334155;
+  background-color: #ffffff;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 10px;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+  min-height: 42px;
+}
+
+.modern-filter-dropdown:hover {
+  border-color: #A5D6A7;
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.08);
+}
+
+.modern-filter-dropdown:focus {
+  border-color: #2E7D32;
+  box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15);
 }

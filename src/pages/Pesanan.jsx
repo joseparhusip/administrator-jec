@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import jsPDF from 'jspdf';
@@ -75,9 +75,56 @@ function Pesanan() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [updatingPayment, setUpdatingPayment] = useState(false);
-  
+
   // State untuk Notifikasi
   const [toastNotif, setToastNotif] = useState(null);
+
+  // ── AUDIO NOTIFIKASI REFS ────────────────────────────────────────────────
+  const notifAudioRef = useRef(null);
+  const notifiedIdsRef = useRef(new Set());
+  const isPendingRef = useRef(false);
+
+  // ── Logic Utama Audio Looping Manual ──
+  useEffect(() => {
+      const pendingCount = pesananData.filter(i => i.payment_status === 'menunggu_konfirmasi').length;
+      isPendingRef.current = pendingCount > 0;
+      
+      if (pendingCount > 0) {
+          if (notifAudioRef.current && notifAudioRef.current.paused) {
+              notifAudioRef.current.play().catch(err => {
+                  console.warn('Browser memblokir autoplay. Silakan klik layar 1x agar suara otomatis keluar.', err);
+              });
+          }
+      } else {
+          if (notifAudioRef.current && !notifAudioRef.current.paused) {
+              notifAudioRef.current.pause();
+              notifAudioRef.current.currentTime = 0;
+              setToastNotif(null); 
+          }
+      }
+  }, [pesananData]);
+
+  // ── Inisialisasi Audio dengan Event Listener Manual ──
+  useEffect(() => {
+      const audio = new Audio('/src/assets/voice/pesanan_masuk.mp3');
+      audio.volume = 1.0;
+      
+      const handleEnded = () => {
+          if (isPendingRef.current) {
+              audio.currentTime = 0;
+              audio.play().catch(err => console.warn("Autoplay ditolak:", err));
+          }
+      };
+      
+      audio.addEventListener('ended', handleEnded);
+      notifAudioRef.current = audio;
+
+      return () => {
+          audio.removeEventListener('ended', handleEnded);
+          audio.pause();
+          audio.src = '';
+      };
+  }, []);
 
   // ── AUTO-UPDATE FETCH (SILENT POLLING) ───────────────────────────────────
   const fetchPesanan = useCallback(async (isSilent = false) => {
@@ -85,22 +132,31 @@ function Pesanan() {
     try {
       const response = await axios.get(`${API_URL}/admin/pesanan`, authHeaders);
       if (response.data.success) {
+        const newData = response.data.data;
+
         setPesananData(prevData => {
-          if (prevData.length > 0) {
-            const prevWaiting = prevData.filter(i => i.payment_status === 'menunggu_konfirmasi').length;
-            const newWaiting = response.data.data.filter(i => i.payment_status === 'menunggu_konfirmasi').length;
-            
-            if (newWaiting > prevWaiting) {
-              const diff = newWaiting - prevWaiting;
-              setToastNotif({
-                title: 'Pembayaran Baru!',
-                desc: `Ada ${diff} user yang baru saja mengklik "Saya Sudah Bayar". Mohon verifikasi.`
-              });
-              
-              setTimeout(() => { setToastNotif(null); }, 6000);
-            }
+          const newWaitingIds = newData
+            .filter(i => i.payment_status === 'menunggu_konfirmasi')
+            .map(i => i.pesanan_id);
+
+          const brandNewIds = newWaitingIds.filter(
+            id => !notifiedIdsRef.current.has(id)
+          );
+
+          if (brandNewIds.length > 0) {
+            brandNewIds.forEach(id => notifiedIdsRef.current.add(id));
+
+            setToastNotif({
+              title: 'Pembayaran Baru!',
+              desc: `Ada ${brandNewIds.length} pembayaran pesanan yang perlu diverifikasi.`
+            });
           }
-          return response.data.data;
+
+          if (newWaitingIds.length === 0) {
+            notifiedIdsRef.current.clear();
+          }
+
+          return newData;
         });
       }
     } catch (err) {
@@ -110,9 +166,9 @@ function Pesanan() {
     }
   }, []);
 
-  useEffect(() => { 
-    fetchPesanan(false); 
-    const interval = setInterval(() => { fetchPesanan(true); }, 5000);
+  useEffect(() => {
+    fetchPesanan(false);
+    const interval = setInterval(() => fetchPesanan(true), 5000);
     return () => clearInterval(interval);
   }, [fetchPesanan]);
 
@@ -121,11 +177,7 @@ function Pesanan() {
     if (pesananData.length > 0 && location.state?.openDetailId) {
       const targetId = location.state.openDetailId;
       const isExist = pesananData.find(p => p.pesanan_id === targetId);
-      
-      if (isExist) {
-        handleViewDetail(targetId);
-      }
-      
+      if (isExist) handleViewDetail(targetId);
       navigate('.', { replace: true, state: {} });
     }
   }, [pesananData, location.state, navigate]);
@@ -150,8 +202,13 @@ function Pesanan() {
       );
 
       if (res.data.success) {
+        if (newStatus !== 'menunggu_konfirmasi') {
+          notifiedIdsRef.current.delete(pesananId);
+        }
+
         alert(res.data.message);
         await fetchPesanan(true);
+
         if (isDetailOpen && selectedOrder?.pesanan_id === pesananId) {
           const detailRes = await axios.get(`${API_URL}/admin/pesanan/${pesananId}/detail`, authHeaders);
           if (detailRes.data.success) setSelectedOrder(detailRes.data.data);
@@ -167,7 +224,7 @@ function Pesanan() {
     }
   };
 
-  // ── FUNGSI BARU: UBAH STATUS JADI SELESAI (OBAT DISERAHKAN) ──────────────
+  // ── FUNGSI UBAH STATUS JADI SELESAI (OBAT DISERAHKAN) ──────────────
   const handleCompleteOrder = async (pesananId, e) => {
     if (e) e.stopPropagation();
 
@@ -245,7 +302,6 @@ function Pesanan() {
       return;
     }
     setIsExporting(true);
-
     try {
       const pesananRows = filteredData.map((item, idx) => ({
         'No': idx + 1,
@@ -255,16 +311,14 @@ function Pesanan() {
         'Status Bayar': PAYMENT_STATUS_CONFIG[item.payment_status]?.label || item.payment_status || '-',
         'Total Bayar': item.total_bayar || 0,
         'Total Bayar (Rp)': formatRupiah(item.total_bayar),
-        'Tanggal Pesanan': new Date(item.created_at).toLocaleString('id-ID', {
-          dateStyle: 'medium', timeStyle: 'short'
-        }),
+        'Tanggal Pesanan': new Date(item.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }),
       }));
 
       const wb = XLSX.utils.book_new();
-
       const wsPesanan = XLSX.utils.json_to_sheet(pesananRows);
       wsPesanan['!cols'] = [
-        { wch: 5 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 24 }, { wch: 18 }, { wch: 22 }, { wch: 22 },
+        { wch: 5 }, { wch: 20 }, { wch: 22 }, { wch: 22 },
+        { wch: 24 }, { wch: 18 }, { wch: 22 }, { wch: 22 },
       ];
       XLSX.utils.book_append_sheet(wb, wsPesanan, 'Data Pesanan');
 
@@ -406,7 +460,12 @@ function Pesanan() {
 
       autoTable(doc, {
         head: [['Gambar', 'Produk', 'Harga Satuan', 'Qty', 'Subtotal']],
-        body: itemsWithImages.map(item => ['', item.nama_obat || '-', formatRupiah(item.harga_saat_pesan), 'x' + item.quantity, formatRupiah(item.harga_saat_pesan * item.quantity)]),
+        body: itemsWithImages.map(item => [
+          '', item.nama_obat || '-',
+          formatRupiah(item.harga_saat_pesan),
+          'x' + item.quantity,
+          formatRupiah(item.harga_saat_pesan * item.quantity)
+        ]),
         startY: y,
         margin: { left: margin, right: margin },
         tableWidth: contentW,
@@ -597,7 +656,7 @@ function Pesanan() {
   // ── BADGE HELPERS ─────────────────────────────────────────────────
   const getStatusBadge = (status) => {
     let color = '#6c757d';
-    if (status === 'Menunggu Pengambilan') color = '#17a2b8'; // Cyan color
+    if (status === 'Menunggu Pengambilan') color = '#17a2b8';
     else if (status === 'Selesai') color = '#28a745';
     else if (status === 'Dibatalkan') color = '#dc3545';
     else if (status === 'Menunggu Pembayaran') color = '#f39c12';
@@ -618,8 +677,7 @@ function Pesanan() {
     };
     return (
       <span style={{
-        backgroundColor: conf.bg,
-        color: conf.color,
+        backgroundColor: conf.bg, color: conf.color,
         border: `1px solid ${conf.border}`,
         padding: '4px 10px', borderRadius: '20px',
         fontSize: '0.75rem', fontWeight: '600',
@@ -636,10 +694,8 @@ function Pesanan() {
   const UserAvatar = ({ profileImage, name }) => {
     const [imgError, setImgError] = useState(false);
     const avatarStyle = {
-      width: '72px', height: '72px',
-      borderRadius: '50%',
-      border: '3px solid #e8f5e9',
-      boxShadow: '0 2px 8px rgba(40,167,69,0.2)',
+      width: '72px', height: '72px', borderRadius: '50%',
+      border: '3px solid #e8f5e9', boxShadow: '0 2px 8px rgba(40,167,69,0.2)',
     };
     if (profileImage && !imgError) {
       return (
@@ -657,8 +713,7 @@ function Pesanan() {
         ...avatarStyle,
         background: 'linear-gradient(135deg, #28a745, #20c997)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#fff', fontWeight: '700', fontSize: '1.3rem',
-        userSelect: 'none'
+        color: '#fff', fontWeight: '700', fontSize: '1.3rem', userSelect: 'none'
       }}>
         {getInitials(name)}
       </div>
@@ -668,7 +723,6 @@ function Pesanan() {
   const PaymentActionButton = ({ pesanan, onUpdate, isLoading, stopPropagation = false }) => {
     const conf = PAYMENT_STATUS_CONFIG[pesanan.payment_status];
     if (!conf || !conf.nextAction) return null;
-
     return (
       <button
         onClick={(e) => {
@@ -677,21 +731,13 @@ function Pesanan() {
         }}
         disabled={isLoading}
         style={{
-          width: '100%',
-          padding: '8px 12px',
+          width: '100%', padding: '8px 12px',
           backgroundColor: isLoading ? '#ccc' : conf.nextColor,
-          color: '#fff',
-          border: 'none',
-          borderRadius: '8px',
-          fontSize: '0.8rem',
-          fontWeight: '700',
+          color: '#fff', border: 'none', borderRadius: '8px',
+          fontSize: '0.8rem', fontWeight: '700',
           cursor: isLoading ? 'not-allowed' : 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '6px',
-          marginTop: '8px',
-          transition: 'opacity 0.2s',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+          marginTop: '8px', transition: 'opacity 0.2s',
           boxShadow: '0 2px 6px rgba(40,167,69,0.25)',
         }}
       >
@@ -702,60 +748,55 @@ function Pesanan() {
 
   return (
     <div className="crud-page">
-      
-      {/* ── Notifikasi Toast Modern ── */}
-      {toastNotif && (
-        <div className="modern-toast">
-          <div className="toast-icon-wrapper">🔔</div>
-          <div className="toast-content-wrapper">
-            <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#856404' }}>{toastNotif.title}</h4>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#666' }}>{toastNotif.desc}</p>
-          </div>
-          <button className="toast-close-btn" onClick={() => setToastNotif(null)}>&times;</button>
-        </div>
-      )}
 
       {/* ── Header ── */}
       <div className="crud-page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap', marginBottom: '15px' }}>
           <h1 style={{ margin: 0 }}>Data Pesanan Masuk</h1>
-          {jumlahMenungguKonfirmasi > 0 && (
-            <span style={{
-              backgroundColor: '#ffc107',
-              color: '#856404',
-              border: '1px solid #ffc107',
-              borderRadius: '20px',
-              padding: '4px 12px',
-              fontSize: '0.8rem',
-              fontWeight: '700',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-              animation: 'pulse 1.5s ease-in-out infinite',
-              boxShadow: '0 0 0 0 rgba(255,193,7,0.4)',
-            }}>
-              🔔 {jumlahMenungguKonfirmasi} Menunggu Konfirmasi
-            </span>
-          )}
+          
+          {/* ── BUNGKUS KHUSUS UNTUK MENDEKATKAN BADGE KUNING & NOTIFIKASI TOAST ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            
+            {jumlahMenungguKonfirmasi > 0 && (
+              <span style={{
+                backgroundColor: '#ffc107', color: '#856404',
+                border: '1px solid #ffc107', borderRadius: '20px',
+                padding: '4px 12px', fontSize: '0.8rem', fontWeight: '700',
+                display: 'flex', alignItems: 'center', gap: '5px',
+                animation: 'pulse 1.5s ease-in-out infinite',
+                boxShadow: '0 0 0 0 rgba(255,193,7,0.4)',
+              }}>
+                🔔 {jumlahMenungguKonfirmasi} Menunggu Konfirmasi
+              </span>
+            )}
+
+            {/* Notifikasi Toast Inline */}
+            {toastNotif && (
+              <div className="pesanan-notif-inline">
+                <div className="pesanan-toast-icon">💳</div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.8rem', color: '#856404' }}>{toastNotif.title}</h4>
+                  <p style={{ margin: 0, fontSize: '0.7rem', color: '#666' }}>{toastNotif.desc}</p>
+                </div>
+                <button className="pesanan-toast-close" onClick={() => setToastNotif(null)}>&times;</button>
+              </div>
+            )}
+            
+          </div>
+          {/* ── SELESAI BUNGKUS KHUSUS ── */}
         </div>
 
-        {/* ── SEARCH, FILTER & EXPORT SEJAJAR BERTIGA ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap', width: '100%', maxWidth: '650px' }}>
-          
           <input
             type="text"
             placeholder="Cari Kode Pesanan / Nama User..."
             className="search-input"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ 
-              flex: 1, 
-              minWidth: '200px', 
-              height: '42px', // Tinggi mutlak
-              padding: '0 15px', 
-              borderRadius: '8px', 
-              border: '1px solid #ddd',
-              boxSizing: 'border-box'
+            style={{
+              flex: 1, minWidth: '200px', height: '42px',
+              padding: '0 15px', borderRadius: '8px',
+              border: '1px solid #ddd', boxSizing: 'border-box'
             }}
           />
 
@@ -763,12 +804,8 @@ function Pesanan() {
             value={filterPayment}
             onChange={(e) => setFilterPayment(e.target.value)}
             style={{
-              height: '42px', // Tinggi mutlak
-              padding: '0 15px',
-              borderRadius: '8px',
-              border: '1px solid #ddd',
-              fontSize: '0.875rem',
-              cursor: 'pointer',
+              height: '42px', padding: '0 15px', borderRadius: '8px',
+              border: '1px solid #ddd', fontSize: '0.875rem', cursor: 'pointer',
               backgroundColor: filterPayment === 'menunggu_konfirmasi' ? '#fff3cd' : '#fff',
               color: filterPayment === 'menunggu_konfirmasi' ? '#856404' : '#333',
               fontWeight: filterPayment !== 'semua' ? '600' : '400',
@@ -787,8 +824,7 @@ function Pesanan() {
             disabled={isExporting || loading || filteredData.length === 0}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: '42px', height: '42px', // Tinggi mutlak
-              padding: '0', flexShrink: 0,
+              width: '42px', height: '42px', padding: '0', flexShrink: 0,
               backgroundColor: isExporting ? '#5a9e6f' : '#1D6F42',
               color: '#fff', border: 'none', borderRadius: '8px',
               cursor: (isExporting || loading || filteredData.length === 0) ? 'not-allowed' : 'pointer',
@@ -832,44 +868,35 @@ function Pesanan() {
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
-          gap: '20px',
-          padding: '10px 0 30px 0'
+          gap: '20px', padding: '10px 0 30px 0'
         }}>
           {filteredData.map((item) => {
             const isMenunggu = item.payment_status === 'menunggu_konfirmasi';
-            const isMenungguPengambilan = item.status === 'Menunggu Pengambilan'; // Status baru
+            const isMenungguPengambilan = item.status === 'Menunggu Pengambilan';
 
             return (
               <div
                 key={item.pesanan_id}
                 onClick={() => handleViewDetail(item.pesanan_id)}
                 style={{
-                  backgroundColor: '#fff',
-                  borderRadius: '14px',
-                  boxShadow: isMenunggu 
+                  backgroundColor: '#fff', borderRadius: '14px',
+                  boxShadow: isMenunggu
                     ? '0 2px 12px rgba(255,193,7,0.35)'
-                    : isMenungguPengambilan 
-                      ? '0 2px 12px rgba(23,162,184,0.3)' 
+                    : isMenungguPengambilan
+                      ? '0 2px 12px rgba(23,162,184,0.3)'
                       : '0 2px 12px rgba(0,0,0,0.08)',
-                  border: isMenunggu 
-                    ? '2px solid #ffc107' 
-                    : isMenungguPengambilan 
-                      ? '2px solid #17a2b8' 
+                  border: isMenunggu
+                    ? '2px solid #ffc107'
+                    : isMenungguPengambilan
+                      ? '2px solid #17a2b8'
                       : '1px solid #e8f5e9',
                   cursor: 'pointer',
                   transition: 'transform 0.18s, box-shadow 0.18s',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  position: 'relative',
+                  overflow: 'hidden', display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', position: 'relative',
                 }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
               >
                 <div style={{
                   width: '100%',
@@ -878,9 +905,7 @@ function Pesanan() {
                     : isMenungguPengambilan
                       ? 'linear-gradient(135deg, #17a2b8, #138496)'
                       : 'linear-gradient(135deg, #28a745, #20c997)',
-                  padding: '10px 14px',
-                  textAlign: 'center',
-                  position: 'relative',
+                  padding: '10px 14px', textAlign: 'center', position: 'relative',
                 }}>
                   <span style={{
                     color: '#fff', fontWeight: '700',
@@ -912,13 +937,8 @@ function Pesanan() {
                     {item.user_name}
                   </p>
 
-                  <div style={{ marginBottom: '6px' }}>
-                    {getStatusBadge(item.status)}
-                  </div>
-
-                  <div style={{ marginBottom: '10px' }}>
-                    {getPaymentStatusBadge(item.payment_status)}
-                  </div>
+                  <div style={{ marginBottom: '6px' }}>{getStatusBadge(item.status)}</div>
+                  <div style={{ marginBottom: '10px' }}>{getPaymentStatusBadge(item.payment_status)}</div>
 
                   <div style={{ width: '100%', height: '1px', backgroundColor: '#f0f0f0', margin: '6px 0' }} />
 
@@ -960,7 +980,6 @@ function Pesanan() {
                     </button>
                   </div>
 
-                  {/* Tombol Konfirmasi Bayar (Khusus Menunggu Bayar) */}
                   {isMenunggu && (
                     <div style={{ width: '100%', paddingBottom: '14px' }}>
                       <PaymentActionButton
@@ -972,7 +991,6 @@ function Pesanan() {
                     </div>
                   )}
 
-                  {/* Tombol Serahkan Obat (Khusus Menunggu Pengambilan) */}
                   {isMenungguPengambilan && (
                     <div style={{ width: '100%', paddingBottom: '14px' }}>
                       <button
@@ -1048,12 +1066,12 @@ function Pesanan() {
                     </div>
                   </div>
 
-                  {/* BANNER KHUSUS SERAHKAN OBAT */}
                   {selectedOrder.status === 'Menunggu Pengambilan' && (
                     <div style={{
                       marginBottom: '20px', backgroundColor: '#e0f3f8',
                       border: '2px solid #17a2b8', borderRadius: '10px',
-                      padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px'
+                      padding: '16px 20px', display: 'flex', alignItems: 'center',
+                      justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px'
                     }}>
                       <div>
                         <h4 style={{ margin: 0, color: '#0c5460', fontSize: '1rem' }}>🛍️ Pasien Siap Mengambil Obat</h4>
@@ -1064,7 +1082,8 @@ function Pesanan() {
                         disabled={updatingPayment}
                         style={{
                           padding: '10px 18px', backgroundColor: '#17a2b8', color: '#fff',
-                          border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: updatingPayment ? 'not-allowed' : 'pointer'
+                          border: 'none', borderRadius: '8px', fontWeight: 'bold',
+                          cursor: updatingPayment ? 'not-allowed' : 'pointer'
                         }}
                       >
                         {updatingPayment ? 'Memproses...' : 'Selesaikan Pesanan'}
@@ -1074,26 +1093,17 @@ function Pesanan() {
 
                   <div style={{
                     marginBottom: '25px',
-                    border: selectedOrder.payment_status === 'menunggu_konfirmasi'
-                      ? '2px solid #ffc107' : '1px solid #e0e0e0',
-                    borderRadius: '10px',
-                    overflow: 'hidden',
+                    border: selectedOrder.payment_status === 'menunggu_konfirmasi' ? '2px solid #ffc107' : '1px solid #e0e0e0',
+                    borderRadius: '10px', overflow: 'hidden',
                   }}>
                     <div style={{
-                      backgroundColor: selectedOrder.payment_status === 'menunggu_konfirmasi'
-                        ? '#fff3cd' : '#f8f9fa',
-                      padding: '14px 20px',
-                      borderBottom: '1px solid #e0e0e0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: '10px',
+                      backgroundColor: selectedOrder.payment_status === 'menunggu_konfirmasi' ? '#fff3cd' : '#f8f9fa',
+                      padding: '14px 20px', borderBottom: '1px solid #e0e0e0',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      flexWrap: 'wrap', gap: '10px',
                     }}>
                       <div>
-                        <p style={{ margin: 0, fontWeight: '700', fontSize: '0.9rem', color: '#333' }}>
-                          Status Pembayaran
-                        </p>
+                        <p style={{ margin: 0, fontWeight: '700', fontSize: '0.9rem', color: '#333' }}>Status Pembayaran</p>
                         <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#666' }}>
                           {selectedOrder.payment_status === 'menunggu_konfirmasi'
                             ? '⚠️ User sudah klik "Saya Sudah Bayar". Mohon verifikasi dan konfirmasi.'
@@ -1115,8 +1125,7 @@ function Pesanan() {
                             onClick={() => !isCurrent && handleUpdatePaymentStatus(selectedOrder.pesanan_id, key)}
                             disabled={isCurrent || updatingPayment}
                             style={{
-                              padding: '7px 14px',
-                              borderRadius: '8px',
+                              padding: '7px 14px', borderRadius: '8px',
                               border: `1px solid ${isCurrent ? conf.border : '#ddd'}`,
                               backgroundColor: isCurrent ? conf.bg : '#fff',
                               color: isCurrent ? conf.color : '#555',
@@ -1133,9 +1142,7 @@ function Pesanan() {
                           </button>
                         );
                       })}
-                      {updatingPayment && (
-                        <span style={{ fontSize: '0.8rem', color: '#888' }}>⏳ Memproses...</span>
-                      )}
+                      {updatingPayment && <span style={{ fontSize: '0.8rem', color: '#888' }}>⏳ Memproses...</span>}
                     </div>
                   </div>
 
@@ -1217,7 +1224,7 @@ function Pesanan() {
         </div>
       )}
 
-      {/* ── CSS Animasi & Modern Toast ── */}
+      {/* ── CSS Animasi ── */}
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
@@ -1227,69 +1234,31 @@ function Pesanan() {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.2; }
         }
-        @keyframes slideInDown {
-          from {
-            transform: translateY(-50px);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
+        @keyframes slideInRight {
+          from { transform: translateX(20px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
         }
-        
-        /* Modern Toast Notification */
-        .modern-toast {
-          position: fixed;
-          top: 30px;
-          right: 30px;
-          background: rgba(255, 255, 255, 0.95);
-          backdrop-filter: blur(10px);
-          border-left: 6px solid #ffc107;
-          border-radius: 12px;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-          padding: 16px 20px;
-          display: flex;
-          align-items: center;
-          gap: 15px;
-          z-index: 10000;
-          animation: slideInDown 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-          max-width: 380px;
-          border-right: 1px solid rgba(0,0,0,0.05);
-          border-top: 1px solid rgba(0,0,0,0.05);
-          border-bottom: 1px solid rgba(0,0,0,0.05);
+        .pesanan-notif-inline {
+          background: #fff;
+          border-left: 4px solid #ffc107;
+          border-radius: 8px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+          padding: 6px 12px;
+          display: flex; align-items: center; gap: 10px;
+          animation: slideInRight 0.4s cubic-bezier(0.175,0.885,0.32,1.275) forwards;
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          white-space: nowrap;
         }
-
-        .toast-icon-wrapper {
-          background: #fff3cd;
-          width: 42px;
-          height: 42px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.2rem;
-          flex-shrink: 0;
+        .pesanan-toast-icon {
+          background: #fff3cd; width: 28px; height: 28px;
+          border-radius: 50%; display: flex; align-items: center;
+          justify-content: center; font-size: 0.9rem; flex-shrink: 0;
         }
-
-        .toast-content-wrapper {
-          flex: 1;
+        .pesanan-toast-close {
+          background: transparent; border: none; font-size: 1.2rem;
+          color: #aaa; cursor: pointer; padding: 0 0 0 5px; line-height: 1; transition: color 0.2s;
         }
-
-        .toast-close-btn {
-          background: transparent;
-          border: none;
-          font-size: 1.5rem;
-          color: #aaa;
-          cursor: pointer;
-          padding: 0;
-          line-height: 1;
-          transition: color 0.2s;
-        }
-
-        .toast-close-btn:hover {
-          color: #333;
-        }
+        .pesanan-toast-close:hover { color: #333; }
       `}</style>
     </div>
   );

@@ -1,7 +1,7 @@
 // path: path/to/your/frontend/components/Dashboard.jsx
 
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // IMPORT INI
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -9,7 +9,7 @@ import {
 import '../css/style.css';
 
 function Dashboard() {
-  const navigate = useNavigate(); // INISIALISASI NAVIGATE
+  const navigate = useNavigate();
 
   const [stats, setStats] = useState({
     totalUsers: 0, totalRS: 0, totalObat: 0, totalCoin: 0, totalCart: 0,
@@ -23,7 +23,13 @@ function Dashboard() {
   const [pendingActions, setPendingActions] = useState([]);
   const [topServices, setTopServices] = useState([]);
 
-  // Warna chart yang lebih modern (Tailwind inspired)
+  // ── STATE NOTIFIKASI & AUDIO ──
+  const [toastNotif, setToastNotif] = useState(null);
+  const notifAudioRef = useRef(null);
+  const notifiedIdsRef = useRef(new Set());
+  const isPendingRef = useRef(false);
+
+  // Warna chart
   const lineColors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#a28dff', '#ff6b9d', '#4ecdc4', '#f39c12', '#e74c3c', '#3498db'];
   const pieColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -66,6 +72,134 @@ function Dashboard() {
     return "Baru saja";
   };
 
+  // ── INISIALISASI AUDIO ──
+  useEffect(() => {
+    // Pastikan kamu punya file dashboard_masuk.mp3 di folder voice kamu.
+    // Atau bisa gunakan file notif general.
+    const audio = new Audio('/src/assets/voice/dashboard_masuk.mp3');
+    audio.volume = 1.0;
+    
+    const handleEnded = () => {
+        if (isPendingRef.current) {
+            audio.currentTime = 0;
+            audio.play().catch(err => console.warn("Autoplay ditolak:", err));
+        }
+    };
+    
+    audio.addEventListener('ended', handleEnded);
+    notifAudioRef.current = audio;
+
+    return () => {
+        audio.removeEventListener('ended', handleEnded);
+        audio.pause();
+        audio.src = '';
+    };
+  }, []);
+
+  // ── LOGIC PLAY/PAUSE AUDIO ──
+  useEffect(() => {
+    isPendingRef.current = pendingActions.length > 0;
+    
+    if (pendingActions.length > 0) {
+        if (notifAudioRef.current && notifAudioRef.current.paused) {
+            notifAudioRef.current.play().catch(err => {
+                console.warn('Browser memblokir autoplay. Silakan klik layar 1x agar suara otomatis keluar.', err);
+            });
+        }
+    } else {
+        if (notifAudioRef.current && !notifAudioRef.current.paused) {
+            notifAudioRef.current.pause();
+            notifAudioRef.current.currentTime = 0;
+            setToastNotif(null); 
+        }
+    }
+  }, [pendingActions]);
+
+  // ── FETCH DATA ──
+  const fetchDashboardData = useCallback(async (isInitial = false) => {
+    const token = localStorage.getItem('adminToken');
+    const headers = { 'Authorization': `Bearer ${token}` };
+    const baseUrl = `${import.meta.env.VITE_API_BASE_URL}/admin/beranda`;
+
+    try {
+      // Polling HANYA untuk pending actions agar server tidak berat
+      const pendingRes = await fetch(`${baseUrl}/pending-actions`, { headers });
+      const pendingData = await pendingRes.json();
+      
+      if (pendingData.success) {
+        const newData = pendingData.data;
+        
+        setPendingActions(prevData => {
+            // Gunakan kombinasi type & action_id sbg ID unik
+            const newPendingItems = newData.map(i => `${i.type}-${i.action_id}`);
+            const brandNewItems = newData.filter(
+                item => !notifiedIdsRef.current.has(`${item.type}-${item.action_id}`)
+            );
+
+            if (brandNewItems.length > 0) {
+                brandNewItems.forEach(item => notifiedIdsRef.current.add(`${item.type}-${item.action_id}`));
+                setToastNotif({
+                    title: 'Pemberitahuan Baru!',
+                    desc: `Ada ${brandNewItems.length} antrean baru (Lasik/Flacs/Obat).`
+                });
+            }
+
+            if (newPendingItems.length === 0) {
+                notifiedIdsRef.current.clear();
+            }
+            return newData;
+        });
+      }
+
+      // Fetch Sisanya hanya saat render pertama kali (isInitial = true)
+      if (isInitial) {
+        const [statsRes, loginRes, recentRes, topRes] = await Promise.all([
+            fetch(`${baseUrl}/stats`, { headers }),
+            fetch(`${baseUrl}/login-activity`, { headers }),
+            fetch(`${baseUrl}/recent-activity`, { headers }),
+            fetch(`${baseUrl}/top-services`, { headers })
+        ]);
+
+        const statsData = await statsRes.json();
+        if (statsData.success) setStats(statsData.data);
+
+        const loginData = await loginRes.json();
+        if (loginData.success) {
+          setLoginActivity(loginData.data.chartData);
+          setUserList(loginData.data.userList);
+        }
+
+        const recentData = await recentRes.json();
+        if (recentData.success) setRecentActivities(recentData.data);
+
+        const topData = await topRes.json();
+        if (topData.success) setTopServices(topData.data);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Fetch semua data pertama kali
+    fetchDashboardData(true);
+    
+    // Polling khusus data antrean setiap 5 detik
+    const interval = setInterval(() => fetchDashboardData(false), 5000);
+    return () => clearInterval(interval);
+  }, [fetchDashboardData]);
+
+  const handleNavigateToDetail = (type, actionId) => {
+    if (!actionId) return;
+    if (type.toLowerCase() === 'lasik') {
+      navigate('/layanan/lasik', { state: { openDetailId: actionId } });
+    } else if (type.toLowerCase() === 'flacs') {
+      navigate('/layanan/flacs', { state: { openDetailId: actionId } });
+    } else if (type.toLowerCase() === 'obat') {
+      navigate('/pesanan', { state: { openDetailId: actionId } });
+    }
+  };
+
   const renderActivityItem = (activity, index) => {
     let markerClass = "marker-default";
     let message = "";
@@ -102,63 +236,33 @@ function Dashboard() {
     );
   };
 
-  useEffect(() => {
-    const token = localStorage.getItem('adminToken');
-    const headers = { 'Authorization': `Bearer ${token}` };
-    const baseUrl = `${import.meta.env.VITE_API_BASE_URL}/admin/beranda`;
-
-    const fetchDashboardData = async () => {
-      try {
-        const statsRes = await fetch(`${baseUrl}/stats`, { headers });
-        const statsData = await statsRes.json();
-        if (statsData.success) setStats(statsData.data);
-
-        const loginRes = await fetch(`${baseUrl}/login-activity`, { headers });
-        const loginData = await loginRes.json();
-        if (loginData.success) {
-          setLoginActivity(loginData.data.chartData);
-          setUserList(loginData.data.userList);
-        }
-
-        const recentRes = await fetch(`${baseUrl}/recent-activity`, { headers });
-        const recentData = await recentRes.json();
-        if (recentData.success) setRecentActivities(recentData.data);
-
-        const pendingRes = await fetch(`${baseUrl}/pending-actions`, { headers });
-        const pendingData = await pendingRes.json();
-        if (pendingData.success) setPendingActions(pendingData.data);
-
-        const topRes = await fetch(`${baseUrl}/top-services`, { headers });
-        const topData = await topRes.json();
-        if (topData.success) setTopServices(topData.data);
-
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      }
-    };
-
-    fetchDashboardData();
-  }, []);
-
-  // FUNGSI BARU: Lempar user ke halaman terkait dengan membawa ID
-  const handleNavigateToDetail = (type, actionId) => {
-    if (!actionId) return;
-
-    if (type.toLowerCase() === 'lasik') {
-      navigate('/layanan/lasik', { state: { openDetailId: actionId } });
-    } else if (type.toLowerCase() === 'flacs') {
-      navigate('/layanan/flacs', { state: { openDetailId: actionId } });
-    } else if (type.toLowerCase() === 'obat') {
-      navigate('/pesanan', { state: { openDetailId: actionId } });
-    }
-  };
-
   return (
     <div className="dashboard-page">
       <div className="dashboard-header">
         <div className="header-text">
           <h1>Admin Dashboard</h1>
           <p>Selamat datang di Admin JEC!</p>
+          
+          {/* NOTIFIKASI INLINE BADGE & TOAST */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
+            {pendingActions.length > 0 && (
+                <span className="dashboard-badge-pulse">
+                    🔔 {pendingActions.length} Menunggu Persetujuan
+                </span>
+            )}
+            
+            {toastNotif && (
+                <div className="dashboard-notif-inline">
+                    <div className="dashboard-toast-icon">🚀</div>
+                    <div>
+                        <h4 style={{ margin: 0, fontSize: '0.8rem', color: '#14a058' }}>{toastNotif.title}</h4>
+                        <p style={{ margin: 0, fontSize: '0.7rem', color: '#666' }}>{toastNotif.desc}</p>
+                    </div>
+                    <button className="dashboard-toast-close" onClick={() => setToastNotif(null)}>&times;</button>
+                </div>
+            )}
+          </div>
+
         </div>
         <div className="header-greeting">
           <p>Selamat {getGreetingTime()} di hari {getDayName()}, Admin JEC! 🚀</p>
@@ -183,10 +287,7 @@ function Dashboard() {
         <div className="stat-card"><div className="stat-icon journals">📚</div><div className="stat-info"><h3>Total Journals</h3><p>{stats.totalJournal.toLocaleString('id-ID')}</p></div></div>
       </div>
 
-      {/* Baris untuk Menunggu Persetujuan & Obat Terpopuler */}
       <div className="dashboard-row-layout">
-        
-        {/* Kolom Menunggu Persetujuan */}
         <div className="content-area" style={{ flex: 1.5 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--gray-200)', paddingBottom: '0.75rem' }}>
             <h2 style={{ margin: 0, border: 'none', padding: 0 }}>Menunggu Persetujuan</h2>
@@ -212,7 +313,6 @@ function Dashboard() {
                         {formatDateTimeIndo(action.created_at)}
                       </span>
                     </div>
-                    {/* MODIFIED: Panggil fungsi navigasi */}
                     <button 
                       className="btn-proses" 
                       onClick={() => handleNavigateToDetail(action.type, action.action_id)}
@@ -228,7 +328,6 @@ function Dashboard() {
           </ul>
         </div>
 
-        {/* Kolom Obat Terpopuler */}
         <div className="chart-container" style={{ flex: 1 }}>
           <div style={{ marginBottom: '1rem', borderBottom: '1px solid var(--gray-200)', paddingBottom: '0.75rem' }}>
             <h2 style={{ margin: 0, border: 'none', padding: 0, textAlign: 'center' }}>Obat Terpopuler</h2>
@@ -249,10 +348,8 @@ function Dashboard() {
             <div style={{ textAlign: 'center', color: '#888', marginTop: '2rem' }}>Belum ada data obat terjual.</div>
           )}
         </div>
-
       </div>
 
-      {/* Baris Chart Login & Aktivitas Terbaru */}
       <div className="dashboard-row-layout">
         <div className="chart-container">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>

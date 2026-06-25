@@ -46,7 +46,7 @@ function UserAvatar({ cart, size = 24, fontSize = '0.7rem' }) {
 
 // ── Tombol Excel SVG Icon ─────────────────────────────────────────
 const ExcelIcon = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
     <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z"
       fill="rgba(255,255,255,0.2)" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     <path d="M14 2V8H20" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -221,36 +221,40 @@ function Cart() {
       {/* Header */}
       <div className="crud-page-header">
         <h1>Data Keranjang Belanja</h1>
-        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            placeholder="Cari nama user atau obat..."
-            className="search-input"
-            style={{ margin: 0 }}
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-          {/* ── Tombol Export Excel ── */}
+        
+        {/* ── KONTROL SEJAJAR SATU BARIS ── */}
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '10px', flexWrap: 'nowrap', flex: 1, justifyContent: 'flex-end' }}>
+          
+          <div className="search-container" style={{ flex: 1, minWidth: '150px', maxWidth: '300px' }}>
+            <input
+              type="text"
+              placeholder="Cari nama user atau obat..."
+              className="search-input"
+              style={{ width: '100%', margin: 0 }}
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          {/* ── Tombol Export Excel (Icon Only) ── */}
           <button
             onClick={handleExportExcel}
             disabled={isExporting || isLoading || filtered.length === 0}
             style={{
-              display: 'flex', alignItems: 'center', gap: '7px',
-              padding: '9px 18px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '42px', height: '42px', padding: '0', flexShrink: 0,
               backgroundColor: '#1D6F42',
-              color: '#fff', border: 'none', borderRadius: '8px',
-              fontSize: '0.855rem', fontWeight: '700', cursor: 'pointer',
+              color: '#fff', border: 'none', borderRadius: '10px',
+              cursor: (isExporting || isLoading || filtered.length === 0) ? 'not-allowed' : 'pointer',
               opacity: (isExporting || isLoading || filtered.length === 0) ? 0.6 : 1,
               boxShadow: '0 2px 8px rgba(29,111,66,0.28)',
               transition: 'background-color 0.2s, transform 0.15s',
-              whiteSpace: 'nowrap',
             }}
             onMouseEnter={e => { if (!isExporting) { e.currentTarget.style.backgroundColor = '#155534'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
             onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#1D6F42'; e.currentTarget.style.transform = 'translateY(0)'; }}
             title="Export data keranjang ke Excel"
           >
-            <ExcelIcon />
-            {isExporting ? 'Mengekspor...' : 'Export Excel'}
+            {isExporting ? <span style={{fontSize: '14px'}}>⏳</span> : <ExcelIcon />}
           </button>
         </div>
       </div>

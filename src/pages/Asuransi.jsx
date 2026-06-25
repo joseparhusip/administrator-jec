@@ -70,6 +70,59 @@ if (!document.getElementById('asuransi-page-styles')) {
       margin: 0;
     }
 
+    /* ══ CUSTOM MODERN DROPDOWN ══════════════════════════════════ */
+    .custom-dropdown-wrapper {
+      position: relative;
+      display: inline-block;
+      min-width: 220px;
+    }
+
+    .custom-dropdown-wrapper::after {
+      content: '▼';
+      position: absolute;
+      top: 50%;
+      right: 14px;
+      transform: translateY(-50%);
+      font-size: 0.75rem;
+      color: #64748B;
+      pointer-events: none;
+      transition: transform 0.2s ease;
+    }
+
+    .modern-filter-dropdown {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      width: 100%;
+      padding: 10px 38px 10px 16px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      color: #334155;
+      background-color: #ffffff;
+      border: 1.5px solid #CBD5E1;
+      border-radius: 10px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+
+    .modern-filter-dropdown:hover {
+      border-color: #A5D6A7;
+      box-shadow: 0 4px 12px rgba(46, 125, 50, 0.08);
+    }
+
+    .modern-filter-dropdown:focus {
+      border-color: #2E7D32;
+      box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.15);
+    }
+
+    .modern-filter-dropdown option {
+      font-weight: normal;
+      color: #1e293b;
+      padding: 10px;
+    }
+
     /* ══ GRID ASURANSI CARD ══════════════════════════════════════ */
     .asuransi-grid {
       display: grid;
@@ -210,6 +263,9 @@ if (!document.getElementById('asuransi-page-styles')) {
       .asuransi-gallery-header .add-button {
         width: 100%;
         justify-content: center;
+      }
+      .custom-dropdown-wrapper {
+        width: 100%;
       }
     }
 
@@ -375,7 +431,7 @@ function AsuransiView({ rs, onBack }) {
       {/* ── Summary ── */}
       <div className="users-summary-bar" style={{ marginBottom: '1.1rem' }}>
         <span className="asuransi-count-badge">
-          🛡️ <strong>{asuransiList.length}</strong> asuransi terdaftar
+          🛡️ {asuransiList.length} asuransi terdaftar
         </span>
       </div>
 
@@ -388,7 +444,7 @@ function AsuransiView({ rs, onBack }) {
       ) : asuransiList.length === 0 ? (
         <div className="users-empty">
           <div className="users-empty-icon">🛡️</div>
-          <p>Belum ada asuransi untuk <strong>{rs.title}</strong>.</p>
+          <p>Belum ada asuransi untuk {rs.title}.</p>
           <small>Klik "+ Tambah Asuransi" untuk menambahkan.</small>
         </div>
       ) : (
@@ -539,21 +595,24 @@ function Asuransi() {
       <div className="crud-page-header">
         <h1>Manajemen Asuransi</h1>
         <div className="crud-header-controls">
-          <select
-            className="filter-dropdown"
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-          >
-            {uniqueTypes.map((type, i) => (
-              <option key={i} value={type}>{type}</option>
-            ))}
-          </select>
+          {/* Implementasi Dropdown Modern */}
+          <div className="custom-dropdown-wrapper">
+            <select
+              className="modern-filter-dropdown"
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+            >
+              {uniqueTypes.map((type, i) => (
+                <option key={i} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       <div className="users-summary-bar">
         <span className="users-count-label">
-          Menampilkan <strong>{filteredList.length}</strong> dari <strong>{fasilitasList.length}</strong> fasilitas
+          Menampilkan {filteredList.length} dari {fasilitasList.length} fasilitas
         </span>
       </div>
 
