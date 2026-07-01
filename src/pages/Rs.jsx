@@ -1,9 +1,9 @@
 // path: src/pages/Rs.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import '../css/style.css';
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;
+// ✅ API URL dihandle axiosInstance
 const IMG_URL = import.meta.env.VITE_IMAGE_BASE_URL;
 const TOKEN = localStorage.getItem('adminToken');
 const authHeaders = { headers: { 'Authorization': `Bearer ${TOKEN}` } };
@@ -172,7 +172,7 @@ function Rs() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(`${API_URL}/admin/fasilitas`, authHeaders);
+      const response = await api.get('/admin/fasilitas', authHeaders);
       setRsData(response.data.data || []);
     } catch (err) {
       console.error('Gagal mengambil data:', err);
@@ -247,7 +247,7 @@ function Rs() {
     data.append('image', newImageFile);
 
     try {
-      await axios.post(`${API_URL}/admin/fasilitas`, data, {
+      await api.post('/admin/fasilitas', data, {
         headers: { ...authHeaders.headers, 'Content-Type': 'multipart/form-data' }
       });
       setToastMessage('Data berhasil ditambahkan.');
@@ -313,7 +313,7 @@ function Rs() {
     }
 
     try {
-      await axios.put(`${API_URL}/admin/fasilitas/${editFormData.id}`, data, {
+      await api.put(`/admin/fasilitas/${editFormData.id}`, data, {
         headers: { ...authHeaders.headers, 'Content-Type': 'multipart/form-data' }
       });
       setToastMessage('Data berhasil diperbarui.');
@@ -340,7 +340,7 @@ function Rs() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      await axios.delete(`${API_URL}/admin/fasilitas/${itemToDelete.id}`, authHeaders);
+      await api.delete(`/admin/fasilitas/${itemToDelete.id}`, authHeaders);
       setToastMessage('Data berhasil dihapus');
       handleCloseConfirmModal();
       fetchRsData();

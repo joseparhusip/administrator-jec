@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import '../css/style.css';
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;
+// ✅ API URL dihandle axiosInstance
 const IMG_URL = import.meta.env.VITE_IMAGE_BASE_URL;
 const TOKEN = localStorage.getItem('adminToken');
 const authHeaders = { headers: { 'Authorization': `Bearer ${TOKEN}` } };
@@ -317,7 +317,7 @@ function AsuransiView({ rs, onBack }) {
     return () => { document.body.style.overflow = 'unset'; };
   }, [isModalOpen]);
 
-  useEffect(() => { fetchAsuransi(); }, [rs.id]);
+  useEffect(() => { fetchAsuransi(); }, [rs.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -328,7 +328,7 @@ function AsuransiView({ rs, onBack }) {
   const fetchAsuransi = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_URL}/admin/asuransi?fasilitas_id=${rs.id}`, authHeaders);
+      const res = await api.get(`/admin/asuransi?fasilitas_id=${rs.id}`, authHeaders);
       if (res.data.success) setAsuransiList(res.data.data);
     } catch (err) {
       console.error('Gagal ambil asuransi:', err);
@@ -377,10 +377,10 @@ function AsuransiView({ rs, onBack }) {
     if (formData.image) data.append('image', formData.image);
     try {
       if (isEditMode) {
-        await axios.put(`${API_URL}/admin/asuransi/${formData.id}`, data, authHeaders);
+        await api.put(`/admin/asuransi/${formData.id}`, data, authHeaders);
         setToastMessage('✅ Asuransi berhasil diupdate!');
       } else {
-        await axios.post(`${API_URL}/admin/asuransi`, data, authHeaders);
+        await api.post('/admin/asuransi', data, authHeaders);
         setToastMessage('✅ Asuransi berhasil ditambahkan!');
       }
       setIsModalOpen(false);
@@ -394,7 +394,7 @@ function AsuransiView({ rs, onBack }) {
   const handleDelete = async (id) => {
     if (!window.confirm('Yakin ingin menghapus asuransi ini?')) return;
     try {
-      await axios.delete(`${API_URL}/admin/asuransi/${id}`, authHeaders);
+      await api.delete(`/admin/asuransi/${id}`, authHeaders);
       setToastMessage('🗑️ Asuransi berhasil dihapus.');
       fetchAsuransi();
     } catch {
@@ -572,7 +572,7 @@ function Asuransi() {
     const fetchFasilitas = async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`${API_URL}/admin/fasilitas`, authHeaders);
+        const res = await api.get('/admin/fasilitas', authHeaders);
         if (res.data.success) setFasilitasList(res.data.data);
       } catch (err) {
         console.error('Gagal ambil fasilitas:', err);

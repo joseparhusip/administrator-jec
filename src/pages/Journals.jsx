@@ -1,10 +1,10 @@
 // path: path-to-your-frontend/src/pages/admin/Journals.jsx
 
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import '../css/style.css';
 
-const API_URL = `${import.meta.env.VITE_API_BASE_URL}/admin/journals`;
+// ✅ API URL dihandle oleh axiosInstance
 const BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL;
 
 // ── Journal Selector Card ─────────────────────────────────────────────
@@ -52,7 +52,7 @@ function PdfViewerModal({ pdfUrl, pdfName, onClose }) {
       window.open(pdfUrl, '_blank');
       onClose();
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isMobile) return null;
 
@@ -301,7 +301,7 @@ function Journals() {
   const fetchJournals = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(API_URL);
+      const response = await api.get('/admin/journals');
       if (response.data.success) setJournals(response.data.data);
     } catch (error) {
       console.error('Error fetching journals:', error);
@@ -311,7 +311,7 @@ function Journals() {
     }
   };
 
-  useEffect(() => { fetchJournals(); }, []);
+  useEffect(() => { fetchJournals(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (toastMessage) {
@@ -361,7 +361,7 @@ function Journals() {
     data.append('cover_image', formData.cover_image);
     data.append('pdf_path', formData.pdf_path);
     try {
-      const res = await axios.post(API_URL, data, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const res = await api.post('/admin/journals', data, { headers: { 'Content-Type': 'multipart/form-data' } });
       if (res.data.success) {
         showToast('Jurnal baru berhasil ditambahkan.');
         fetchJournals();
@@ -410,7 +410,7 @@ function Journals() {
     if (editFormData.cover_image) data.append('cover_image', editFormData.cover_image);
     if (editFormData.pdf_path) data.append('pdf_path', editFormData.pdf_path);
     try {
-      const res = await axios.put(`${API_URL}/${editFormData.id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const res = await api.put(`/admin/journals/${editFormData.id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
       if (res.data.success) {
         showToast('Jurnal berhasil diperbarui.');
         fetchJournals();
@@ -439,7 +439,7 @@ function Journals() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      const res = await axios.delete(`${API_URL}/${itemToDelete.id}`);
+      const res = await api.delete(`/admin/journals/${itemToDelete.id}`);
       if (res.data.success) {
         showToast('Data jurnal berhasil dihapus.');
         fetchJournals();

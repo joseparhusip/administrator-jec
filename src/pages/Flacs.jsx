@@ -488,7 +488,7 @@ const Flacs = () => {
             if (response.data.success) {
                 const newData = response.data.data;
 
-                setBookings(prevData => {
+                setBookings(() => {
                     const newPendingIds = newData
                         .filter(i => getStatusLabel(i.status) === 'Menunggu')
                         .map(i => i.id);
@@ -616,6 +616,7 @@ const Flacs = () => {
             XLSX.writeFile(wb, `Booking_FLACS_${new Date().toISOString().slice(0, 10)}.xlsx`);
             showToast('Data berhasil diekspor ke Excel!');
         } catch (err) {
+            console.error('Gagal mengekspor data:', err);
             showToast('Gagal mengekspor data.');
         } finally {
             setIsExporting(false);

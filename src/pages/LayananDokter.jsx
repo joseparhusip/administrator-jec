@@ -3,12 +3,11 @@
 // ✅ FULL REDESIGN: Card mirip Dokter.jsx, hari sejajar, detail layanan premium + Pagination
 
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import '../css/style.css';
 
-// API_BASE = base server tanpa /api (untuk gambar via serverBase di dalam komponen)
-// API calls di file ini build manual: ${API_BASE}/api/admin/...
-const API_BASE = import.meta.env.VITE_IMAGE_BASE_URL;
+// serverBase = base server tanpa /api (untuk gambar, diturunkan dari axiosInstance.defaults.baseURL)
+// ✅ Fix: API_BASE (variabel global yang sudah dihapus) diganti dengan api.defaults.baseURL
 
 // ============================================================
 // ICON COMPONENTS
@@ -1021,16 +1020,16 @@ function DetailDokter({ dokter, onBack, showToast, onRefreshList }) {
 
   const token   = localStorage.getItem('adminToken');
   const headers = { Authorization: `Bearer ${token}` };
-  const serverBase = API_BASE.replace('/api', '');
+  const serverBase = (api.defaults.baseURL || '').replace('/api', '');
 
   const fetchDetail = useCallback(async () => {
     setLoading(true);
     try {
       const [jadwalRes, layananRes, allLayananRes, fasRes] = await Promise.all([
-        axios.get(`${API_BASE}/api/admin/layanan-dokter/jadwal/${dokter.id}`, { headers }),
-        axios.get(`${API_BASE}/api/admin/layanan-dokter/layanan/${dokter.id}`, { headers }),
-        axios.get(`${API_BASE}/api/admin/layanan-dokter/all-layanan`, { headers }),
-        axios.get(`${API_BASE}/api/admin/layanan-dokter/fasilitas`, { headers }),
+        api.get(`/admin/layanan-dokter/jadwal/${dokter.id}`, { headers }),
+        api.get(`/admin/layanan-dokter/layanan/${dokter.id}`, { headers }),
+        api.get('/admin/layanan-dokter/all-layanan', { headers }),
+        api.get('/admin/layanan-dokter/fasilitas', { headers }),
       ]);
       setJadwalList(jadwalRes.data.data || []);
       setLayananList(layananRes.data.data || []);
@@ -1041,7 +1040,7 @@ function DetailDokter({ dokter, onBack, showToast, onRefreshList }) {
     } finally {
       setLoading(false);
     }
-  }, [dokter.id]);
+  }, [dokter.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchDetail(); }, [fetchDetail]);
 
@@ -1049,10 +1048,10 @@ function DetailDokter({ dokter, onBack, showToast, onRefreshList }) {
   const handleSaveJadwal = async (formData) => {
     try {
       if (modalJadwal.data) {
-        await axios.put(`${API_BASE}/api/admin/layanan-dokter/jadwal/${modalJadwal.data.id}`, formData, { headers });
+        await api.put(`/admin/layanan-dokter/jadwal/${modalJadwal.data.id}`, formData, { headers });
         showToast('Jadwal berhasil diperbarui ✅', 'success');
       } else {
-        await axios.post(`${API_BASE}/api/admin/layanan-dokter/jadwal`, { dokter_id: dokter.id, ...formData }, { headers });
+        await api.post('/admin/layanan-dokter/jadwal', { dokter_id: dokter.id, ...formData }, { headers });
         showToast('Jadwal berhasil ditambahkan ✅', 'success');
       }
       setModalJadwal({ open: false, data: null });
@@ -1066,7 +1065,7 @@ function DetailDokter({ dokter, onBack, showToast, onRefreshList }) {
   const handleDeleteJadwal = async (id) => {
     if (!window.confirm('Yakin ingin menghapus jadwal ini?')) return;
     try {
-      await axios.delete(`${API_BASE}/api/admin/layanan-dokter/jadwal/${id}`, { headers });
+      await api.delete(`/admin/layanan-dokter/jadwal/${id}`, { headers });
       showToast('Jadwal berhasil dihapus 🗑️', 'success');
       fetchDetail();
       onRefreshList?.();
@@ -1078,8 +1077,8 @@ function DetailDokter({ dokter, onBack, showToast, onRefreshList }) {
   // --- Layanan CRUD ---
   const handleSaveLayanan = async (layananIds) => {
     try {
-      await axios.put(
-        `${API_BASE}/api/admin/layanan-dokter/layanan/${dokter.id}`,
+      await api.put(
+        `/admin/layanan-dokter/layanan/${dokter.id}`,
         { layanan_ids: layananIds },
         { headers }
       );
@@ -1315,7 +1314,7 @@ function LayananDokter() {
 
   const token   = localStorage.getItem('adminToken');
   const headers = { Authorization: `Bearer ${token}` };
-  const serverBase = API_BASE.replace('/api', '');
+  const serverBase = (api.defaults.baseURL || '').replace('/api', '');
 
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type });
@@ -1324,7 +1323,7 @@ function LayananDokter() {
   const fetchDokter = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await axios.get(`${API_BASE}/api/admin/layanan-dokter/dokter`, { headers });
+      const res  = await api.get('/admin/layanan-dokter/dokter', { headers });
       const data = res.data.data || [];
       setDokterList(data);
       setFiltered(data);
@@ -1333,7 +1332,7 @@ function LayananDokter() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchDokter(); }, [fetchDokter]);
 

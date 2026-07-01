@@ -3,12 +3,12 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import jecLogo from '../../assets/logo/jec-logo.png';
 import '../../css/style.css';
-import Footer from '../../components/Footer'; 
+import Footer from '../../components/Footer';
 
 const UserIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.209１ 3 １２ 3C９.７９０８６ 3 ８ 4.79086 ８ 7C８ 9.209１４ ９.７９０８６ １１ １２ １１Ｚ" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
@@ -32,7 +32,8 @@ function Login({ onLoginSuccess }) {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:3000/api/admin/auth/login', { email, password });
+      const loginURL = `${import.meta.env.VITE_API_BASE_URL || 'https://api-backend-jec.jakartaeyecenter.site'}/api/admin/auth/login`;
+      const response = await axios.post(loginURL, { email, password });
 
       if (response.data.success) {
         localStorage.setItem('adminToken', response.data.token);
@@ -46,7 +47,6 @@ function Login({ onLoginSuccess }) {
   };
 
   return (
-    
     <div className="auth-page-wrapper">
       <div className="login-page">
         <div className="login-graphic-side">
@@ -99,7 +99,6 @@ function Login({ onLoginSuccess }) {
         </div>
       </div>
 
-      {/* ⭐ Footer di sini */}
       <Footer />
     </div>
   );

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import '../css/style.css';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import * as XLSX from 'xlsx';
 
-const API_URL    = `${import.meta.env.VITE_API_BASE_URL}/admin/cart`;
+// ✅ API URL dihandle oleh axiosInstance
 const BASE_URL   = import.meta.env.VITE_IMAGE_BASE_URL;
 
 const calcTotal = (cart) => {
@@ -75,7 +75,7 @@ function Cart() {
   const fetchCartData = async () => {
     setIsLoading(true);
     try {
-      const res = await axios.get(API_URL);
+      const res = await api.get('/admin/cart');
       if (res.data.success) setCartData(res.data.data);
       else setToastMessage('Gagal mengambil data keranjang.');
     } catch (err) {
@@ -117,7 +117,7 @@ function Cart() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.put(`${API_URL}/${selectedCartItem.cart_id}`, editFormData);
+      const res = await api.put(`/admin/cart/${selectedCartItem.cart_id}`, editFormData);
       if (res.data.success) {
         setToastMessage('Item keranjang berhasil diperbarui.');
         fetchCartData();
@@ -140,7 +140,7 @@ function Cart() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      const res = await axios.delete(`${API_URL}/${itemToDelete.cart_id}`);
+      const res = await api.delete(`/admin/cart/${itemToDelete.cart_id}`);
       if (res.data.success) {
         setToastMessage('Item keranjang berhasil dihapus.');
         fetchCartData();
@@ -200,7 +200,7 @@ function Cart() {
       XLSX.utils.book_append_sheet(wb, wsRing, 'Ringkasan');
       XLSX.writeFile(wb, `Keranjang_Belanja_${new Date().toISOString().slice(0, 10)}.xlsx`);
       setToastMessage('Data berhasil diekspor ke Excel!');
-    } catch (err) {
+    } catch {
       setToastMessage('Gagal mengekspor data.');
     } finally {
       setIsExporting(false);

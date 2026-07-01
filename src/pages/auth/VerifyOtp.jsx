@@ -54,7 +54,7 @@ function VerifyOtp() {
     setError('');
 
     try {
-      const res = await axios.post('http://localhost:3000/api/admin/auth/verify-otp', { email, otp: otpCode });
+      const res = await axios.post('https://api-backend-jec.jakartaeyecenter.site/api/admin/auth/verify-otp', { email, otp: otpCode });
 
       if (res.data.success) {
         navigate('/reset-password', { state: { email } });
@@ -71,7 +71,7 @@ function VerifyOtp() {
     setOtp(new Array(6).fill(''));
     setError('');
     inputRefs.current[0].focus();
-    await axios.post('http://localhost:3000/api/admin/auth/forgot-password', { email });
+    await axios.post('https://api-backend-jec.jakartaeyecenter.site/api/admin/auth/forgot-password', { email });
   };
 
   const formatTime = (seconds) => {

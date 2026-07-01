@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/axiosInstance'; // ✅ Ganti axios biasa → axiosInstance (sudah ada baseURL + token otomatis)
 import * as XLSX from 'xlsx';
 import '../css/style.css';
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;
+// ✅ Hanya IMG_URL yang masih dibutuhkan (untuk tampilkan gambar)
 const IMG_URL = import.meta.env.VITE_IMAGE_BASE_URL;
-const TOKEN = localStorage.getItem('adminToken');
-const authHeaders = { headers: { 'Authorization': `Bearer ${TOKEN}` } };
 
 const MAX_CHARS = 100;
 
@@ -243,10 +241,13 @@ function Obat() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(`${API_URL}/admin/obat`, authHeaders);
+
+
+      // ✅ Pakai api (axiosInstance) — baseURL + token sudah otomatis
+      const response = await api.get('/admin/obat');
       setObatData(response.data.data || []);
     } catch (err) {
-      console.error("Error fetching data:", err);
+      console.error("Error fetching obat:", err.response?.status, err.config?.url);
       setError('Gagal memuat data obat. Pastikan Anda sudah login.');
     } finally {
       setLoading(false);
@@ -284,8 +285,9 @@ function Obat() {
     data.append('stok', formData.stok); // ✅ Push stok
     data.append('image_url', formData.image_file);
     try {
-      await axios.post(`${API_URL}/admin/obat`, data, {
-        headers: { ...authHeaders.headers, 'Content-Type': 'multipart/form-data' }
+      // ✅ Pakai api (axiosInstance), Content-Type multipart otomatis dideteksi
+      await api.post('/admin/obat', data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       setToastMessage('Data obat baru berhasil ditambahkan.');
       setIsModalOpen(false);
@@ -338,8 +340,9 @@ function Obat() {
     data.append('stok', editFormData.stok); // ✅ Push Stok
     if (editFormData.image_file) data.append('image_url', editFormData.image_file);
     try {
-      await axios.put(`${API_URL}/admin/obat/${editFormData.obat_id}`, data, {
-        headers: { ...authHeaders.headers, 'Content-Type': 'multipart/form-data' }
+      // ✅ Pakai api (axiosInstance)
+      await api.put(`/admin/obat/${editFormData.obat_id}`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       setToastMessage('Data obat berhasil diperbarui.');
       handleCloseEditModal();
@@ -360,7 +363,8 @@ function Obat() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      await axios.delete(`${API_URL}/admin/obat/${itemToDelete.obat_id}`, authHeaders);
+      // ✅ Pakai api (axiosInstance)
+      await api.delete(`/admin/obat/${itemToDelete.obat_id}`);
       setToastMessage('Data obat berhasil dihapus');
       handleCloseConfirmModal();
       fetchObatData();
@@ -409,6 +413,7 @@ function Obat() {
       XLSX.writeFile(wb, `Data_Obat_${new Date().toISOString().slice(0, 10)}.xlsx`);
       setToastMessage('Data berhasil diekspor ke Excel!');
     } catch (err) {
+      console.error('Gagal mengekspor data obat:', err);
       setToastMessage('Gagal mengekspor data.');
     } finally {
       setIsExporting(false);

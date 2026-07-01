@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../css/style.css';
@@ -12,7 +12,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     new URL('leaflet/dist/images/marker-shadow.png',  import.meta.url).href,
 });
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;   // http://…/api
+// ✅ API URL dihandle axiosInstance
 const IMG_URL = import.meta.env.VITE_IMAGE_BASE_URL; // http://…  (untuk path gambar)
 const TOKEN   = localStorage.getItem('adminToken');
 const authHeaders = { headers: { 'Authorization': `Bearer ${TOKEN}` } };
@@ -58,7 +58,9 @@ function extractCoordsFromUrl(url) {
     if (m) return [parseFloat(m[1]), parseFloat(m[2])];
     m = url.match(/destination=(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (m) return [parseFloat(m[1]), parseFloat(m[2])];
-  } catch {}
+  } catch {
+    // ignore parse errors, fallback to null
+  }
   return null;
 }
 
@@ -222,7 +224,7 @@ function TourModal({ url, title, onClose }) {
 }
 
 // ─── Leaflet Map ──────────────────────────────────────────────────────────────
-function LeafletMap({ maps, selectedId, onMarkerClick, onOpenTour }) {
+function LeafletMap({ maps, selectedId, onMarkerClick }) {
   const mapRef        = useRef(null);
   const leafletMapRef = useRef(null);
   const markersRef    = useRef({});
@@ -259,6 +261,7 @@ function LeafletMap({ maps, selectedId, onMarkerClick, onOpenTour }) {
   useEffect(() => {
     if (!leafletMapRef.current) return;
     renderMarkers(maps);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maps]);
 
   // Highlight marker terpilih
@@ -350,7 +353,7 @@ function LeafletMap({ maps, selectedId, onMarkerClick, onOpenTour }) {
       markersRef.current[item.id] = marker;
     });
 
-    try { leafletMapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 }); } catch {}
+    try { leafletMapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 }); } catch { /* ignore bounds error */ }
   }
 
   return (
@@ -442,7 +445,7 @@ function Maps() {
   const fetchMapsData = async () => {
     setLoading(true); setError(null);
     try {
-      const res = await axios.get(`${API_URL}/admin/maps`, authHeaders);
+      const res = await api.get('/admin/maps', authHeaders);
       setMapsData(res.data.data || []);
     } catch {
       setError('Gagal memuat data lokasi. Pastikan Anda sudah login.');
@@ -467,7 +470,7 @@ function Maps() {
   const handleSubmit = async e => {
     e.preventDefault();
     try {
-      await axios.post(`${API_URL}/admin/maps`, formData, authHeaders);
+      await api.post('/admin/maps', formData, authHeaders);
       setToastMessage('Data lokasi baru berhasil ditambahkan.');
       setIsModalOpen(false);
       setFormData({ nama_rs: '', map_url: '', virtual_tour_url: '' });
@@ -485,7 +488,7 @@ function Maps() {
   const handleEditSubmit = async e => {
     e.preventDefault();
     try {
-      await axios.put(`${API_URL}/admin/maps/${editFormData.id}`, editFormData, authHeaders);
+      await api.put(`/admin/maps/${editFormData.id}`, editFormData, authHeaders);
       setToastMessage('Data lokasi berhasil diperbarui.');
       handleCloseEditModal(); fetchMapsData();
     } catch (err) { setError(err.response?.data?.message || 'Gagal memperbarui data.'); }
@@ -497,7 +500,7 @@ function Maps() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      await axios.delete(`${API_URL}/admin/maps/${itemToDelete.id}`, authHeaders);
+      await api.delete(`/admin/maps/${itemToDelete.id}`, authHeaders);
       setToastMessage('Data lokasi berhasil dihapus.');
       handleCloseConfirmModal();
       if (selectedId === itemToDelete.id) setSelectedId(null);

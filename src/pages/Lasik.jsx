@@ -485,7 +485,7 @@ const Lasik = () => {
             const response = await api.get('/admin/layanan/lasik');
             if (response.data.success) {
                 const newData = response.data.data;
-                setBookings(prevData => {
+                setBookings(() => {
                     const newPendingIds = newData
                         .filter(i => getStatusLabel(i.status) === 'Menunggu')
                         .map(i => i.id);
@@ -618,7 +618,7 @@ const Lasik = () => {
             XLSX.utils.book_append_sheet(wb, wsRing, 'Ringkasan');
             XLSX.writeFile(wb, `Booking_LASIK_${new Date().toISOString().slice(0, 10)}.xlsx`);
             showToast('Data berhasil diekspor ke Excel!');
-        } catch (err) {
+        } catch {
             showToast('Gagal mengekspor data.');
         } finally {
             setIsExporting(false);

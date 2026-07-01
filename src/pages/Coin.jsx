@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import '../css/style.css';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import * as XLSX from 'xlsx';
 
-const API_URL = `${import.meta.env.VITE_API_BASE_URL}/admin/coin`;
+// ✅ API URL dihandle oleh axiosInstance
 const BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL;
 
 const TIER_CONFIG = {
@@ -59,7 +59,7 @@ function Coin() {
   const fetchUserPoints = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(API_URL);
+      const response = await api.get("/admin/coin");
       if (response.data.success) setUserPoints(response.data.data);
       else setToastMessage('Gagal mengambil data dari server.');
     } catch (error) {
@@ -90,7 +90,7 @@ function Coin() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.put(`${API_URL}/${selectedUser.user_id}`, {
+      const response = await api.put(`/admin/coin/${selectedUser.user_id}`, {
         points: editFormData.points,
         current_tier: editFormData.current_tier,
       });
@@ -116,7 +116,7 @@ function Coin() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      const response = await axios.delete(`${API_URL}/${itemToDelete.user_id}`);
+      const response = await api.delete(`/admin/coin/${itemToDelete.user_id}`);
       if (response.data.success) {
         setToastMessage('Data poin user berhasil dihapus.');
         fetchUserPoints();
@@ -172,7 +172,7 @@ function Coin() {
       XLSX.utils.book_append_sheet(wb, wsRing, 'Ringkasan Tier');
       XLSX.writeFile(wb, `Poin_Tier_User_${new Date().toISOString().slice(0, 10)}.xlsx`);
       setToastMessage('Data berhasil diekspor ke Excel!');
-    } catch (err) {
+    } catch {
       setToastMessage('Gagal mengekspor data.');
     } finally {
       setIsExporting(false);

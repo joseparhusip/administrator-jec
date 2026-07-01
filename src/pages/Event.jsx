@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import '../css/style.css';
 
-const API_URL = `${import.meta.env.VITE_API_BASE_URL}/admin/events`;
+// ✅ API URL dihandle oleh axiosInstance
 const BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL;
 
 // ── Event Card (gaya rs-card) ────────────────────────────────────
@@ -56,7 +56,7 @@ function Event() {
   const fetchEvents = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(API_URL);
+      const response = await api.get('/admin/events');
       if (response.data.success) setEvents(response.data.data);
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -115,7 +115,7 @@ function Event() {
     data.append('title', formData.title);
     data.append('event_image', formData.image);
     try {
-      const response = await axios.post(API_URL, data, {
+      const response = await api.post('/admin/events', data, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       if (response.data.success) {
@@ -173,7 +173,7 @@ function Event() {
     data.append('title', editFormData.title);
     if (editFormData.image) data.append('event_image', editFormData.image);
     try {
-      const response = await axios.put(`${API_URL}/${editFormData.id}`, data, {
+      const response = await api.put(`/admin/events/${editFormData.id}`, data, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       if (response.data.success) {
@@ -203,7 +203,7 @@ function Event() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      const response = await axios.delete(`${API_URL}/${itemToDelete.id}`);
+      const response = await api.delete(`/admin/events/${itemToDelete.id}`);
       if (response.data.success) {
         setToastMessage('Data event berhasil dihapus.');
         fetchEvents();

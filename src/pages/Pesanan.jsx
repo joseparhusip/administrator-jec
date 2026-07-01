@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import '../css/style.css';
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;
+// ✅ API URL dihandle axiosInstance
 const IMG_URL = import.meta.env.VITE_IMAGE_BASE_URL;
 const TOKEN = localStorage.getItem('adminToken');
 
@@ -130,11 +130,11 @@ function Pesanan() {
   const fetchPesanan = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      const response = await axios.get(`${API_URL}/admin/pesanan`, authHeaders);
+      const response = await api.get('/admin/pesanan', authHeaders);
       if (response.data.success) {
         const newData = response.data.data;
 
-        setPesananData(prevData => {
+        setPesananData(() => {
           const newWaitingIds = newData
             .filter(i => i.payment_status === 'menunggu_konfirmasi')
             .map(i => i.pesanan_id);
@@ -195,8 +195,8 @@ function Pesanan() {
 
     setUpdatingPayment(true);
     try {
-      const res = await axios.patch(
-        `${API_URL}/admin/pesanan/${pesananId}/payment-status`,
+      const res = await api.patch(
+        `/admin/pesanan/${pesananId}/payment-status`,
         { payment_status: newStatus },
         authHeaders
       );
@@ -210,7 +210,7 @@ function Pesanan() {
         await fetchPesanan(true);
 
         if (isDetailOpen && selectedOrder?.pesanan_id === pesananId) {
-          const detailRes = await axios.get(`${API_URL}/admin/pesanan/${pesananId}/detail`, authHeaders);
+          const detailRes = await api.get(`/admin/pesanan/${pesananId}/detail`, authHeaders);
           if (detailRes.data.success) setSelectedOrder(detailRes.data.data);
         }
       } else {
@@ -233,8 +233,8 @@ function Pesanan() {
 
     setUpdatingPayment(true);
     try {
-      const res = await axios.patch(
-        `${API_URL}/admin/pesanan/${pesananId}/status`,
+      const res = await api.patch(
+        `/admin/pesanan/${pesananId}/status`,
         { status: 'Selesai' },
         authHeaders
       );
@@ -243,7 +243,7 @@ function Pesanan() {
         alert(res.data.message);
         await fetchPesanan(true);
         if (isDetailOpen && selectedOrder?.pesanan_id === pesananId) {
-          const detailRes = await axios.get(`${API_URL}/admin/pesanan/${pesananId}/detail`, authHeaders);
+          const detailRes = await api.get(`/admin/pesanan/${pesananId}/detail`, authHeaders);
           if (detailRes.data.success) setSelectedOrder(detailRes.data.data);
         }
       } else {
@@ -262,9 +262,9 @@ function Pesanan() {
     setLoadingDetail(true);
     setSelectedOrder(null);
     try {
-      const res = await axios.get(`${API_URL}/admin/pesanan/${id}/detail`, authHeaders);
+      const res = await api.get(`/admin/pesanan/${id}/detail`, authHeaders);
       if (res.data.success) setSelectedOrder(res.data.data);
-    } catch (err) {
+    } catch {
       alert("Gagal memuat detail pesanan.");
       setIsDetailOpen(false);
     } finally {
@@ -282,11 +282,11 @@ function Pesanan() {
     e.stopPropagation();
     if (window.confirm('Apakah Anda yakin ingin menghapus riwayat pesanan ini?')) {
       try {
-        await axios.delete(`${API_URL}/admin/pesanan/${id}`, authHeaders);
+        await api.delete(`/admin/pesanan/${id}`, authHeaders);
         alert('Pesanan berhasil dihapus.');
         fetchPesanan(true);
         if (isDetailOpen && selectedOrder?.pesanan_id === id) closeDetailModal();
-      } catch (err) {
+      } catch {
         alert('Gagal menghapus pesanan.');
       }
     }
@@ -452,7 +452,7 @@ function Pesanan() {
         (selectedOrder.items || []).map(async (item) => {
           let base64 = null;
           if (item.image_url) {
-            try { base64 = await getBase64ImageFromURL(`${IMG_URL}/${item.image_url}`); } catch (err) {}
+            try { base64 = await getBase64ImageFromURL(`${IMG_URL}/${item.image_url}`); } catch { /* gambar gagal dimuat, lanjut tanpa gambar */ }
           }
           return { ...item, base64 };
         })
@@ -559,7 +559,7 @@ function Pesanan() {
       doc.text('Dokumen ini digenerate otomatis oleh sistem Apotek JEC.', pageW / 2, pageH - 4, { align: 'center' });
 
       doc.save(`Invoice_${selectedOrder.kode_pesanan}.pdf`);
-    } catch (error) {
+    } catch {
       alert("Terjadi kesalahan saat membuat PDF.");
     } finally {
       setIsDownloading(false);

@@ -1,9 +1,9 @@
 // path: src/pages/FasilitasRs.jsx
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useCallback } from 'react';
+import api from '../api/axiosInstance';
 import '../css/style.css';
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;   // http://…/api
+// ✅ API URL dihandle axiosInstance
 const IMG_URL = import.meta.env.VITE_IMAGE_BASE_URL; // http://…  (untuk path gambar)
 const TOKEN = localStorage.getItem('adminToken');
 const authHeaders = { headers: { 'Authorization': `Bearer ${TOKEN}` } };
@@ -46,7 +46,7 @@ function DetailView({ rs, onBack }) {
 
     useEffect(() => {
         fetchDetail();
-    }, [rs.id]);
+    }, [fetchDetail]);
 
     useEffect(() => {
         if (toastMessage) {
@@ -55,10 +55,10 @@ function DetailView({ rs, onBack }) {
         }
     }, [toastMessage]);
 
-    const fetchDetail = async () => {
+    const fetchDetail = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/admin/fasilitas-rs/detail?fasilitas_id=${rs.id}`, authHeaders);
+            const res = await api.get(`/admin/fasilitas-rs/detail?fasilitas_id=${rs.id}`, authHeaders);
             if (res.data.success) {
                 setDetail(res.data.data);
                 setCurrentPage(1);
@@ -68,7 +68,7 @@ function DetailView({ rs, onBack }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [rs.id]);
 
     const validateImageFile = (file) => {
         const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
@@ -107,7 +107,7 @@ function DetailView({ rs, onBack }) {
         data.append('fasilitas_id', rs.id);
         data.append('image', uploadFile);
         try {
-            await axios.post(`${API_URL}/admin/fasilitas-rs`, data, authHeaders);
+            await api.post('/admin/fasilitas-rs', data, authHeaders);
             setToastMessage('Gambar berhasil ditambahkan!');
             setIsModalOpen(false);
             setUploadFile(null);
@@ -122,10 +122,11 @@ function DetailView({ rs, onBack }) {
     const handleDelete = async (id) => {
         if (window.confirm('Yakin ingin menghapus gambar ini?')) {
             try {
-                await axios.delete(`${API_URL}/admin/fasilitas-rs/${id}`, authHeaders);
+                await api.delete(`/admin/fasilitas-rs/${id}`, authHeaders);
                 setToastMessage('Gambar berhasil dihapus.');
                 fetchDetail();
             } catch (err) {
+                console.error('Gagal menghapus gambar:', err);
                 alert('Gagal menghapus.');
             }
         }
@@ -295,7 +296,7 @@ function FasilitasRs() {
         const fetchFasilitas = async () => {
             setLoading(true);
             try {
-                const res = await axios.get(`${API_URL}/admin/fasilitas`, authHeaders);
+                const res = await api.get('/admin/fasilitas', authHeaders);
                 if (res.data.success) setFasilitasList(res.data.data);
             } catch (err) {
                 console.error("Gagal ambil daftar RS:", err);

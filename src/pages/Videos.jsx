@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import '../css/style.css';
 
-const API_URL = `${import.meta.env.VITE_API_BASE_URL}/admin/videos`;
+// ✅ API URL dihandle oleh axiosInstance
 
 // ── Video Card (gaya rs-card) ────────────────────────────────────
 function VideoCard({ video, onSelect }) {
@@ -70,7 +70,7 @@ function Videos() {
   const fetchVideos = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(API_URL);
+      const response = await api.get('/admin/videos');
       if (response.data.success) setVideos(response.data.data);
     } catch (error) {
       console.error('Error fetching videos:', error);
@@ -102,7 +102,7 @@ function Videos() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post(API_URL, formData);
+      const response = await api.post('/admin/videos', formData);
       if (response.data.success) {
         setToastMessage('Video baru berhasil ditambahkan.');
         fetchVideos();
@@ -142,7 +142,7 @@ function Videos() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.put(`${API_URL}/${editFormData.id}`, editFormData);
+      const response = await api.put(`/admin/videos/${editFormData.id}`, editFormData);
       if (response.data.success) {
         setToastMessage('Video berhasil diperbarui.');
         fetchVideos();
@@ -170,7 +170,7 @@ function Videos() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      const response = await axios.delete(`${API_URL}/${itemToDelete.id}`);
+      const response = await api.delete(`/admin/videos/${itemToDelete.id}`);
       if (response.data.success) {
         setToastMessage('Data video berhasil dihapus.');
         fetchVideos();

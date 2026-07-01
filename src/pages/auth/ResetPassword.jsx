@@ -29,7 +29,7 @@ function ResetPassword() {
     setIsLoading(true);
 
     try {
-      const res = await axios.post('http://localhost:3000/api/admin/auth/reset-password', { email, newPassword });
+      const res = await axios.post('https://api-backend-jec.jakartaeyecenter.site/api/admin/auth/reset-password', { email, newPassword });
 
       if (res.data.success) {
         alert('Password berhasil diperbarui! Silakan login kembali.');

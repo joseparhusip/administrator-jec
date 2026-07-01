@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import api from '../api/axiosInstance';
 import '../css/style.css';
 
 // ── Konfigurasi API ──
 const API_BASE_URL = import.meta.env.VITE_IMAGE_BASE_URL; // untuk path gambar
-const API_URL = `${import.meta.env.VITE_API_BASE_URL}/admin/users`;
+// ✅ API URL dihandle axiosInstance
 const WILAYAH_BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/proxy-wilayah`;
 
 const AGAMA_OPTIONS = ['Islam', 'Kristen', 'Katolik', 'Hindu', 'Buddha', 'Konghucu'];
@@ -91,7 +91,9 @@ function useWilayah() {
       const d = await r.json();
       setCities((d.data || []).map(e => ({ id: e.code, name: e.name })));
       setDistricts([]); setVillages([]);
-    } catch {}
+    } catch (err) {
+      console.error('Gagal memuat daftar kota:', err);
+    }
     setLoadingWilayah(p => ({ ...p, cities: false }));
   }, []);
 
@@ -103,7 +105,9 @@ function useWilayah() {
       const d = await r.json();
       setDistricts((d.data || []).map(e => ({ id: e.code, name: e.name })));
       setVillages([]);
-    } catch {}
+    } catch (err) {
+      console.error('Gagal memuat daftar kecamatan:', err);
+    }
     setLoadingWilayah(p => ({ ...p, districts: false }));
   }, []);
 
@@ -114,7 +118,9 @@ function useWilayah() {
       const r = await fetch(`${WILAYAH_BASE_URL}/villages/${districtId}.json`);
       const d = await r.json();
       setVillages((d.data || []).map(e => ({ id: e.code, name: e.name })));
-    } catch {}
+    } catch (err) {
+      console.error('Gagal memuat daftar kelurahan:', err);
+    }
     setLoadingWilayah(p => ({ ...p, villages: false }));
   }, []);
 
@@ -596,7 +602,7 @@ function Users() {
     setLoading(true);
     setApiError(null);
     try {
-      const response = await axios.get(API_URL);
+      const response = await api.get('/admin/users');
       const data = (response.data.data || []).map(u => ({
         ...u,
         has_password: Boolean(u.has_password),
@@ -648,7 +654,7 @@ function Users() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(API_URL, buildFormData(formData), { headers: { 'Content-Type': 'multipart/form-data' } });
+      await api.post('/admin/users', buildFormData(formData), { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast('User baru berhasil ditambahkan');
       fetchUsers();
       setIsModalOpen(false);
@@ -695,7 +701,7 @@ function Users() {
     const fd = buildFormData(editFormData);
     if (!editFormData.password) fd.delete('password');
     try {
-      await axios.put(`${API_URL}/${editFormData.user_id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await api.put(`/admin/users/${editFormData.user_id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       showToast('Data user berhasil diperbarui');
       fetchUsers();
       handleCloseEditModal();
@@ -713,7 +719,7 @@ function Users() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      await axios.delete(`${API_URL}/${itemToDelete.user_id}`);
+      await api.delete(`/admin/users/${itemToDelete.user_id}`);
       showToast('Data user berhasil dihapus');
       setUsers(prev => prev.filter(u => u.user_id !== itemToDelete.user_id));
     } catch (error) {

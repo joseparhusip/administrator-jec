@@ -1,4 +1,4 @@
-// path: path/to/your/frontend/components/Dashboard.jsx
+// path: src/pages/admin/Dashboard.jsx
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,6 +7,9 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 import '../css/style.css';
+
+// ✅ FIX #1: Gunakan fallback URL agar tidak pernah undefined
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api-backend-jec.jakartaeyecenter.site';
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -73,16 +76,21 @@ function Dashboard() {
   };
 
   // ── INISIALISASI AUDIO ──
+  // ✅ Fix autoplay: browser hanya izinkan audio setelah user interaction
+  const userHasInteracted = useRef(false);
+
   useEffect(() => {
-    // Pastikan kamu punya file dashboard_masuk.mp3 di folder voice kamu.
-    // Atau bisa gunakan file notif general.
+    const markInteracted = () => { userHasInteracted.current = true; };
+    document.addEventListener('click', markInteracted, { once: true });
+    document.addEventListener('keydown', markInteracted, { once: true });
+
     const audio = new Audio('/src/assets/voice/dashboard_masuk.mp3');
     audio.volume = 1.0;
     
     const handleEnded = () => {
-        if (isPendingRef.current) {
+        if (isPendingRef.current && userHasInteracted.current) {
             audio.currentTime = 0;
-            audio.play().catch(err => console.warn("Autoplay ditolak:", err));
+            audio.play().catch(() => {});
         }
     };
     
@@ -90,6 +98,8 @@ function Dashboard() {
     notifAudioRef.current = audio;
 
     return () => {
+        document.removeEventListener('click', markInteracted);
+        document.removeEventListener('keydown', markInteracted);
         audio.removeEventListener('ended', handleEnded);
         audio.pause();
         audio.src = '';
@@ -101,10 +111,9 @@ function Dashboard() {
     isPendingRef.current = pendingActions.length > 0;
     
     if (pendingActions.length > 0) {
-        if (notifAudioRef.current && notifAudioRef.current.paused) {
-            notifAudioRef.current.play().catch(err => {
-                console.warn('Browser memblokir autoplay. Silakan klik layar 1x agar suara otomatis keluar.', err);
-            });
+        // ✅ Fix: hanya play jika user sudah interact dengan halaman
+        if (notifAudioRef.current && notifAudioRef.current.paused && userHasInteracted.current) {
+            notifAudioRef.current.play().catch(() => {});
         }
     } else {
         if (notifAudioRef.current && !notifAudioRef.current.paused) {
@@ -116,42 +125,47 @@ function Dashboard() {
   }, [pendingActions]);
 
   // ── FETCH DATA ──
+  // ✅ FIX #2: Gunakan API_BASE yang sudah benar
   const fetchDashboardData = useCallback(async (isInitial = false) => {
     const token = localStorage.getItem('adminToken');
     const headers = { 'Authorization': `Bearer ${token}` };
-    const baseUrl = `${import.meta.env.VITE_API_BASE_URL}/admin/beranda`;
+    const baseUrl = `${API_BASE}/api/admin/beranda`;  // ✅ prefix /api/admin/beranda
 
     try {
-      // Polling HANYA untuk pending actions agar server tidak berat
+      // Polling HANYA untuk pending actions
       const pendingRes = await fetch(`${baseUrl}/pending-actions`, { headers });
-      const pendingData = await pendingRes.json();
-      
-      if (pendingData.success) {
-        const newData = pendingData.data;
-        
-        setPendingActions(prevData => {
-            // Gunakan kombinasi type & action_id sbg ID unik
-            const newPendingItems = newData.map(i => `${i.type}-${i.action_id}`);
-            const brandNewItems = newData.filter(
-                item => !notifiedIdsRef.current.has(`${item.type}-${item.action_id}`)
-            );
 
-            if (brandNewItems.length > 0) {
-                brandNewItems.forEach(item => notifiedIdsRef.current.add(`${item.type}-${item.action_id}`));
-                setToastNotif({
-                    title: 'Pemberitahuan Baru!',
-                    desc: `Ada ${brandNewItems.length} antrean baru (Lasik/Flacs/Obat).`
-                });
-            }
+      // ✅ FIX #3: Cek content-type sebelum parse JSON agar tidak crash saat server error
+      const pendingContentType = pendingRes.headers.get('content-type') || '';
+      if (!pendingRes.ok || !pendingContentType.includes('application/json')) {
+        console.error(`[Dashboard] Pending actions error: ${pendingRes.status} ${pendingRes.statusText}`);
+      } else {
+        const pendingData = await pendingRes.json();
+        if (pendingData.success) {
+          const newData = pendingData.data;
+          
+          setPendingActions(() => {
+              const brandNewItems = newData.filter(
+                  item => !notifiedIdsRef.current.has(`${item.type}-${item.action_id}`)
+              );
 
-            if (newPendingItems.length === 0) {
-                notifiedIdsRef.current.clear();
-            }
-            return newData;
-        });
+              if (brandNewItems.length > 0) {
+                  brandNewItems.forEach(item => notifiedIdsRef.current.add(`${item.type}-${item.action_id}`));
+                  setToastNotif({
+                      title: 'Pemberitahuan Baru!',
+                      desc: `Ada ${brandNewItems.length} antrean baru (Lasik/Flacs/Obat).`
+                  });
+              }
+
+              if (newData.length === 0) {
+                  notifiedIdsRef.current.clear();
+              }
+              return newData;
+          });
+        }
       }
 
-      // Fetch Sisanya hanya saat render pertama kali (isInitial = true)
+      // Fetch sisanya hanya saat render pertama
       if (isInitial) {
         const [statsRes, loginRes, recentRes, topRes] = await Promise.all([
             fetch(`${baseUrl}/stats`, { headers }),
@@ -160,20 +174,30 @@ function Dashboard() {
             fetch(`${baseUrl}/top-services`, { headers })
         ]);
 
-        const statsData = await statsRes.json();
-        if (statsData.success) setStats(statsData.data);
+        // ✅ FIX #4: Safe JSON parsing untuk setiap response
+        const safeJson = async (res) => {
+          const ct = res.headers.get('content-type') || '';
+          if (!res.ok || !ct.includes('application/json')) {
+            console.error(`[Dashboard] HTTP ${res.status} pada ${res.url}`);
+            return null;
+          }
+          return res.json();
+        };
 
-        const loginData = await loginRes.json();
-        if (loginData.success) {
-          setLoginActivity(loginData.data.chartData);
-          setUserList(loginData.data.userList);
+        const statsData = await safeJson(statsRes);
+        if (statsData?.success) setStats(statsData.data);
+
+        const loginData = await safeJson(loginRes);
+        if (loginData?.success) {
+          setLoginActivity(loginData.data.chartData || []);
+          setUserList(loginData.data.userList || []);
         }
 
-        const recentData = await recentRes.json();
-        if (recentData.success) setRecentActivities(recentData.data);
+        const recentData = await safeJson(recentRes);
+        if (recentData?.success) setRecentActivities(recentData.data);
 
-        const topData = await topRes.json();
-        if (topData.success) setTopServices(topData.data);
+        const topData = await safeJson(topRes);
+        if (topData?.success) setTopServices(topData.data);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -181,10 +205,7 @@ function Dashboard() {
   }, []);
 
   useEffect(() => {
-    // Fetch semua data pertama kali
     fetchDashboardData(true);
-    
-    // Polling khusus data antrean setiap 5 detik
     const interval = setInterval(() => fetchDashboardData(false), 5000);
     return () => clearInterval(interval);
   }, [fetchDashboardData]);

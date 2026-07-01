@@ -2,15 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import '../css/style.css'; 
-import axios from 'axios';
+import api from '../api/axiosInstance';  // ✅ Fix: pakai axiosInstance
 
-const API_URL = `${import.meta.env.VITE_API_BASE_URL}/admin/auth/profile`;
-const TOKEN = localStorage.getItem('adminToken');
-const authHeaders = {
-  headers: {
-    'Authorization': `Bearer ${TOKEN}`
-  }
-};
+// ✅ Fix: API_URL relatif (axiosInstance sudah handle baseURL + /api prefix)
+// ✅ Fix: token tidak diambil di module level (stale), tapi dihandle interceptor
 
 function EditAdmin() {
   const [formData, setFormData] = useState({
@@ -27,7 +22,7 @@ function EditAdmin() {
   useEffect(() => {
     const fetchAdminProfile = async () => {
       try {
-        const response = await axios.get(API_URL, authHeaders);
+        const response = await api.get('/admin/auth/profile');
         if (response.data.success) {
           const { name, email } = response.data.data;
           setFormData(prevData => ({ ...prevData, name, email }));
@@ -80,14 +75,13 @@ function EditAdmin() {
     };
 
     try {
-      const response = await axios.put(API_URL, dataToUpdate, authHeaders);
+      const response = await api.put('/admin/auth/profile', dataToUpdate);
       if (response.data.success) {
         setToastMessage('Profil berhasil diperbarui.');
         setToastType('success');
+        // ✅ Fix: updateProfile di backend tidak return data baru, jadi pakai formData saja
         setFormData(prevData => ({
           ...prevData,
-          name: response.data.data.name,
-          email: response.data.data.email,
           currentPassword: '',
           newPassword: '',
           confirmPassword: ''
@@ -101,7 +95,6 @@ function EditAdmin() {
 
   return (
     <div className="crud-page">
-      {/* Header Rata Kiri */}
       <div className="crud-page-header">
         <div>
           <h1 style={{ display: 'block' }}>Pengaturan Profil</h1>
@@ -109,10 +102,8 @@ function EditAdmin() {
         </div>
       </div>
       
-      {/* Wrapper digeser ke tengah dengan marginLeft/Right auto dan maxWidth */}
       <div className="settings-wrapper" style={{ marginLeft: 'auto', marginRight: 'auto', maxWidth: '800px' }}>
         
-        {/* Form menggunakan flex column */}
         <form onSubmit={handleSubmit} className="settings-form" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
           {/* Section 1: Data Pribadi */}
@@ -159,7 +150,6 @@ function EditAdmin() {
             </div>
           </div>
 
-          {/* Submit Area Rata Kiri */}
           <div className="settings-footer" style={{ justifyContent: 'flex-start' }}>
             <button type="submit" className="btn-primary btn-large">
               Simpan Perubahan
@@ -169,7 +159,6 @@ function EditAdmin() {
         </form>
       </div>
 
-      {/* TOAST NOTIFICATION (Tanpa Ikon) */}
       {toastMessage && (
         <div className={`toast-notification ${toastType === 'error' ? 'error' : ''}`}>
           {toastMessage}

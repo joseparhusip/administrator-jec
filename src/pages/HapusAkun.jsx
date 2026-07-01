@@ -2,23 +2,37 @@
 
 import React, { useState } from 'react';
 import '../css/style.css'; 
+import { useNavigate } from 'react-router-dom';
+import api from '../api/axiosInstance';  // ✅ Fix: tambah API call yang sebelumnya belum ada
 
 function HapusAkun() {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('error');
+  const navigate = useNavigate();
 
-  const handleOpenConfirmModal = () => {
-    setIsConfirmModalOpen(true);
-  };
+  const handleOpenConfirmModal = () => setIsConfirmModalOpen(true);
+  const handleCloseConfirmModal = () => setIsConfirmModalOpen(false);
 
-  const handleCloseConfirmModal = () => {
-    setIsConfirmModalOpen(false);
-  };
-
-  const handleDeleteConfirm = () => {
-    console.log("AKUN BERHASIL DIHAPUS!");
-    handleCloseConfirmModal();
-    // Panggil API Hapus di sini, lalu redirect
-    // window.location.href = '/login'; 
+  // ✅ Fix: implementasi API delete yang sebelumnya hanya console.log
+  const handleDeleteConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      const response = await api.delete('/admin/auth/profile');
+      if (response.data.success) {
+        localStorage.removeItem('adminToken');
+        handleCloseConfirmModal();
+        // Redirect ke login setelah hapus
+        navigate('/login');
+      }
+    } catch (error) {
+      setToastMessage(error.response?.data?.message || 'Gagal menghapus akun. Coba lagi.');
+      setToastType('error');
+      handleCloseConfirmModal();
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -53,7 +67,7 @@ function HapusAkun() {
         </div>
       </div>
 
-      {/* MODAL KONFIRMASI (2 OPSI) */}
+      {/* MODAL KONFIRMASI */}
       {isConfirmModalOpen && (
         <div className="modal-overlay" onClick={handleCloseConfirmModal}>
           <div className="modal-content modal-danger" onClick={(e) => e.stopPropagation()}>
@@ -69,19 +83,25 @@ function HapusAkun() {
               </p>
               
               <div className="modal-action-buttons">
-                <button type="button" className="btn-secondary btn-block" onClick={handleCloseConfirmModal}>
+                <button type="button" className="btn-secondary btn-block" onClick={handleCloseConfirmModal} disabled={isDeleting}>
                   Batalkan
                 </button>
-                <button type="button" className="btn-danger btn-block" onClick={handleDeleteConfirm}>
-                  Ya, Yakin Dihapus!
+                <button type="button" className="btn-danger btn-block" onClick={handleDeleteConfirm} disabled={isDeleting}>
+                  {isDeleting ? 'Menghapus...' : 'Ya, Yakin Dihapus!'}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {toastMessage && (
+        <div className={`toast-notification ${toastType === 'error' ? 'error' : ''}`}>
+          {toastMessage}
+        </div>
+      )}
     </div>
-  )
+  );
 }
 
 export default HapusAkun;
