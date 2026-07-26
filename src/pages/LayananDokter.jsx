@@ -1335,18 +1335,28 @@ function LayananDokter() {
       // dari /admin/layanan-dokter/dokter tidak konsisten dengan file yang benar-benar ada di server.
       const [resLayanan, resDokterFoto] = await Promise.all([
         api.get('/admin/layanan-dokter/dokter', { headers }),
-        api.get('/admin/dokter', { headers }).catch(() => ({ data: { data: [] } })),
+        api.get('/admin/dokter', { headers }).catch(err => {
+          console.error('[LayananDokter] Gagal fetch /admin/dokter untuk foto:', err.response?.status, err.response?.data || err.message);
+          return { data: { data: [] } };
+        }),
       ]);
+
+      console.log('[LayananDokter] Response /admin/layanan-dokter/dokter:', resLayanan.data);
+      console.log('[LayananDokter] Response /admin/dokter (sumber foto):', resDokterFoto.data);
 
       const dataLayanan = resLayanan.data.data || [];
       const fotoById = new Map(
         (resDokterFoto.data.data || []).map(d => [d.id, d.foto])
       );
 
+      console.log('[LayananDokter] Peta foto by id:', Array.from(fotoById.entries()));
+
       const merged = dataLayanan.map(d => ({
         ...d,
         foto: fotoById.get(d.id) || d.foto,
       }));
+
+      console.log('[LayananDokter] Hasil merge (foto final tiap dokter):', merged.map(d => ({ id: d.id, nama: d.nama_dokter, foto: d.foto })));
 
       setDokterList(merged);
       setFiltered(merged);
