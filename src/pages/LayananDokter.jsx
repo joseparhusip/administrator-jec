@@ -1119,12 +1119,18 @@ function DetailDokter({ dokter, onBack, showToast, onRefreshList }) {
           <div className="ld-detail-profile-card">
             <div className="ld-detail-photo-wrap">
               {fotoUrl ? (
-                <img
-                  src={fotoUrl}
-                  alt={dokter.nama_dokter}
-                  className="ld-detail-photo"
-                  onError={e => { e.target.style.display = 'none'; }}
-                />
+                <>
+                  <img
+                    src={fotoUrl}
+                    alt={dokter.nama_dokter}
+                    className="ld-detail-photo"
+                    onError={e => {
+                      e.target.style.display = 'none';
+                      if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  <div className="ld-detail-photo-placeholder" style={{ display: 'none' }}><IconUser /></div>
+                </>
               ) : (
                 <div className="ld-detail-photo-placeholder"><IconUser /></div>
               )}
@@ -1429,12 +1435,18 @@ function LayananDokter() {
                   {/* ── Foto ── */}
                   <div className="ld-card-photo-wrap">
                     {fotoUrl ? (
-                      <img
-                        src={fotoUrl}
-                        alt={dokter.nama_dokter}
-                        className="ld-card-photo"
-                        onError={e => { e.target.style.display = 'none'; }}
-                      />
+                      <>
+                        <img
+                          src={fotoUrl}
+                          alt={dokter.nama_dokter}
+                          className="ld-card-photo"
+                          onError={e => {
+                            e.target.style.display = 'none';
+                            if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                          }}
+                        />
+                        <div className="ld-card-photo-placeholder" style={{ display: 'none' }}><IconUser /></div>
+                      </>
                     ) : (
                       <div className="ld-card-photo-placeholder"><IconUser /></div>
                     )}
