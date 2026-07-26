@@ -1329,10 +1329,27 @@ function LayananDokter() {
   const fetchDokter = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await api.get('/admin/layanan-dokter/dokter', { headers });
-      const data = res.data.data || [];
-      setDokterList(data);
-      setFiltered(data);
+      // Ambil data utama dari endpoint layanan-dokter (jadwal, layanan, dll)
+      // dan data foto yang BENAR dari endpoint /admin/dokter (sumber foto yang valid),
+      // lalu gabungkan berdasarkan id. Ini workaround sementara karena field `foto`
+      // dari /admin/layanan-dokter/dokter tidak konsisten dengan file yang benar-benar ada di server.
+      const [resLayanan, resDokterFoto] = await Promise.all([
+        api.get('/admin/layanan-dokter/dokter', { headers }),
+        api.get('/admin/dokter', { headers }).catch(() => ({ data: { data: [] } })),
+      ]);
+
+      const dataLayanan = resLayanan.data.data || [];
+      const fotoById = new Map(
+        (resDokterFoto.data.data || []).map(d => [d.id, d.foto])
+      );
+
+      const merged = dataLayanan.map(d => ({
+        ...d,
+        foto: fotoById.get(d.id) || d.foto,
+      }));
+
+      setDokterList(merged);
+      setFiltered(merged);
     } catch (err) {
       showToast('Gagal memuat data dokter: ' + (err.response?.data?.message || err.message), 'error');
     } finally {
