@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
 import '../css/style.css';
+import flacsMasukSound from '../assets/voice/flacs_masuk.mp3';
 
 const CalendarIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -455,7 +456,7 @@ const Flacs = () => {
 
     // ── Inisialisasi Audio dengan Event Listener Manual ──
     useEffect(() => {
-        const audio = new Audio('/src/assets/voice/flacs_masuk.mp3');
+        const audio = new Audio(flacsMasukSound);
         audio.volume = 1.0;
         
         const handleEnded = () => {

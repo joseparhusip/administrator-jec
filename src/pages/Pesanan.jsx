@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import '../css/style.css';
+import pesananMasukSound from '../assets/voice/pesanan_masuk.mp3';
 
 // ✅ API URL dihandle axiosInstance
 const IMG_URL = import.meta.env.VITE_IMAGE_BASE_URL;
@@ -106,7 +107,7 @@ function Pesanan() {
 
   // ── Inisialisasi Audio dengan Event Listener Manual ──
   useEffect(() => {
-      const audio = new Audio('/src/assets/voice/pesanan_masuk.mp3');
+      const audio = new Audio(pesananMasukSound);
       audio.volume = 1.0;
       
       const handleEnded = () => {
